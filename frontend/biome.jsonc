@@ -7,9 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    // tsconfig.json を除くのは、Next.js がビルド時に必要な設定を追記し、
-    // その際の整形(配列を複数行に展開する)が biome の整形と食い違うためである。
-    "includes": ["**", "!node_modules", "!.next", "!dist", "!build", "!wailsjs", "!public", "!tsconfig.json"]
+    "includes": ["**", "!node_modules", "!.next", "!dist", "!build", "!wailsjs", "!public"]
   },
   "formatter": {
     "enabled": true,

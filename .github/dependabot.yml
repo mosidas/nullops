@@ -1,0 +1,16 @@
+# 依存の更新 PR を Dependabot に作らせる設定。
+# 選択肢の一覧: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # フロントエンドの npm 依存(package.json は frontend/ にある)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  # バックエンドの Go module 依存
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -1,0 +1,18 @@
+# Wails directories
+build/bin
+frontend/dist
+frontend/wailsjs
+node_modules
+
+# Wails junk files
+.syso
+frontend/package.json.md5
+
+# IDEs
+.idea
+.vscode
+
+# System enviroment variables
+env
+
+.DS_Store

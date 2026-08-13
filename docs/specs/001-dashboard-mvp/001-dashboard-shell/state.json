@@ -1,11 +1,11 @@
 {
   "workflow": "sdd",
   "unit": "dashboard-shell",
-  "state": "initialized",
+  "state": "spec-generated",
   "approvals": {
     "spec": false,
     "tasks": false
   },
   "created": "2026-08-13",
-  "updated": "2026-08-13"
+  "updated": "2026-08-14"
 }

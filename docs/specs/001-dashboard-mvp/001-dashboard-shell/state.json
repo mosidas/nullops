@@ -1,10 +1,10 @@
 {
   "workflow": "sdd",
   "unit": "dashboard-shell",
-  "state": "tasks-generated",
+  "state": "tasks-approved",
   "approvals": {
     "spec": true,
-    "tasks": false
+    "tasks": true
   },
   "created": "2026-08-13",
   "updated": "2026-08-14"

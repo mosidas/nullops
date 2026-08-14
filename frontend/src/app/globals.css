@@ -1,26 +1,35 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* static を付けない @theme にしないのは、後続の作業単位が var() で直に参照する
+   トークンまで未使用と見なされて出力から落ちるのを避けるため。 */
+@theme static {
+  --color-surface-0: #10141c;
+  --color-surface-1: #171d28;
+  --color-border: #2a3242;
+  --color-text: #c8d3e8;
+  --color-text-dim: #8b97b0;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-accent-log: #7dcfff;
+  --color-accent-commit: #bb9af7;
+  --color-accent-line: #73daca;
+  --color-accent-graph: #9ece6a;
+  --color-accent-gauge: #ff9e64;
+  --color-accent-scatter: #ff7eb6;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-level-info: #7aa2f7;
+  --color-level-warn: #e0af68;
+  --color-level-error: #f7768e;
+  --color-level-debug: #8891a8;
+
+  /* Web フォントを読まないのは、wails build がネットワークに依存しないようにするため。 */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+
+  /* body 側で font-family を上書きしないのは、preflight が html に敷く既定を
+     置き換えたほうが、body の外（ダイアログ等）にも等幅が届くため。 */
+  --default-font-family: var(--font-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-surface-0);
+  color: var(--color-text);
 }

@@ -42,7 +42,7 @@
 ## タスク一覧
 
 - [ ] 1. (P) フロントエンドの土台（デザイントークンと 6 枠レイアウト）
-  - [ ] 1.1 `@theme` に spec.md §6.6 のトークンを定義し、配色をダーク 1 系統・既定の書体を等幅にする。`prefers-color-scheme` の分岐、`body { font-family: Arial, ... }`、および `--font-geist-*` を参照する既存の `@theme inline` を除去・置換する（タスク 1.2 で Geist の定義が消えるため、残すと `--font-mono` が解決できなくなる）
+  - [x] 1.1 `@theme` に spec.md §6.6 のトークンを定義し、配色をダーク 1 系統・既定の書体を等幅にする。`prefers-color-scheme` の分岐、`body { font-family: Arial, ... }`、および `--font-geist-*` を参照する既存の `@theme inline` を除去・置換する（タスク 1.2 で Geist の定義が消えるため、残すと `--font-mono` が解決できなくなる）
     _Requirements: 9.1, 9.5, 9.6, 9.7, 10.4_
     _Boundary: DesignTokens_
     - 対象ファイル: `frontend/src/app/globals.css`(変更)
@@ -261,4 +261,16 @@
 
 ## Implementation Notes
 
-(このセクションは dev-implement が実装中の学習・選択した知識 port・横断的な気付き・レビューを通過した境界外変更の申告を追記する領域。初期は空でよい)
+### 知識 port の選択
+
+- `python3 .claude/skills/dev-core/scripts/ports.py --skill dev-implement --root docs/dev/ports` は「port ルートが存在しない」で終了した。本リポジトリに `docs/dev/ports/` が無いため、**注入知識なし**で実装する。規約は `CLAUDE.md`(言語規約・Go / TypeScript コーディング規約)を正本とする。
+
+### 実行環境の制約(この実装セッション)
+
+- **画面を撮って確かめられない**。`screencapture` は sandbox の内外いずれでも `could not create image from display` で失敗する(macOS の画面収録権限がターミナルへ付与されていない)。したがって tasks.md の検証コマンドのうち**画面の見え方に依存するもの**は実行できず、`UNVERIFIED` として記録し、人間が実施すべき確認手順を残す。静的検査・自動テスト・`grep`・コマンド出力から判定できるものは通常どおり実行する。
+- コードを一時的に壊して確認する手順(タスク 1.6 の枠を 5 個に減らす操作、タスク 5.6 の `loadSnapshot` を reject させる操作)は**実行しない**。目視で確かめられない以上、壊す操作に意味がなく、元へ戻し忘れる危険だけが残るため。該当する受け入れ基準を満たす実装は書き、検証を `UNVERIFIED` として記録する。
+- メインタスク 1・2・3 は `(P)` だが**逐次実行**する。2 と 3 の検証はどちらも `go test ./...` でモジュール全体を回すため、同時進行させると片方の未完成コードでもう片方の検証が落ちる。
+
+### 未検証項目(人間が確認すべきこと)
+
+(タスクの進行に伴って追記する)

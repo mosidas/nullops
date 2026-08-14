@@ -69,7 +69,7 @@
     - 対象ファイル: `frontend/src/components/DashboardGrid.tsx`(新規)
     - 仕様参照: spec.md §5.7 `DashboardGrid`
     - 検証コマンド: `cd frontend && npm run lint` / `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components` が 0 件
-  - [ ] 1.5 `page.tsx` のデモ UI（ロゴ・名前入力・Greet ボタンと `Greet` の呼び出し）を除去し、`DashboardGrid` に spec.md §5.7 の表が定める 6 つの見出しをその位置で並べる。`Log Stream` を含む 6 枠すべてを、この段では中身の位置に `pending` を表示するプレースホルダとする（`Log Stream` の中身はタスク 5.2 が差し替える）
+  - [x] 1.5 `page.tsx` のデモ UI（ロゴ・名前入力・Greet ボタンと `Greet` の呼び出し）を除去し、`DashboardGrid` に spec.md §5.7 の表が定める 6 つの見出しをその位置で並べる。`Log Stream` を含む 6 枠すべてを、この段では中身の位置に `pending` を表示するプレースホルダとする（`Log Stream` の中身はタスク 5.2 が差し替える）
     _Requirements: 1.1, 1.2, 1.3, 1.7, 8.3, 8.4_
     _Boundary: AppShell_
     _Depends: 1.3, 1.4_
@@ -271,6 +271,15 @@
 - コードを一時的に壊して確認する手順(タスク 1.6 の枠を 5 個に減らす操作、タスク 5.6 の `loadSnapshot` を reject させる操作)は**実行しない**。目視で確かめられない以上、壊す操作に意味がなく、元へ戻し忘れる危険だけが残るため。該当する受け入れ基準を満たす実装は書き、検証を `UNVERIFIED` として記録する。
 - メインタスク 1・2・3 は `(P)` だが**逐次実行**する。2 と 3 の検証はどちらも `go test ./...` でモジュール全体を回すため、同時進行させると片方の未完成コードでもう片方の検証が落ちる。
 
+### タスクを跨ぐ知見
+
+- `page.tsx` は `PANEL_TITLES.map(...)` の結果を `DashboardGrid` へ渡すため、`children` は **配列 1 個**になる。子要素数を数えるときは `React.Children.count`(配列を平坦化して数える)を使う。`Array.isArray(children)` や `children.length` で判定すると 1 と数えてしまう。
+- `page.tsx` は状態を持たなくなったため `'use client'` を外した(Server Component)。タスク 5.2 で `Log Stream` の中身を差し替えるときは `LogStreamPanel` 側に `'use client'` が要る。
+- `frontend/package.json` に型検査スクリプトは無いが `npx tsc --noEmit` は動く(typescript が devDependency にある)。Biome は型検査をしないため、参照の削除漏れの検出に有効。
+- 色の直値検査 `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/...` は、対象に `frontend/src/app` を含めるとトークンの正本である `globals.css` に必ずヒットする。判定は `--include="*.tsx" --include="*.ts"` で絞って行う(トークン定義そのものは違反ではない)。
+- `frontend/public/logo-universal.png` はタスク 1.5 でどこからも参照されなくなった。spec.md §2 が `frontend/public` の画像をスコープ外としているため本作業単位では削除しない(後続への申し送り)。
+
 ### 未検証項目(人間が確認すべきこと)
 
-(タスクの進行に伴って追記する)
+- **タスク 1.5**(受け入れ基準 1.1 の見え方・8.3・8.4)。`wails dev` を起動し、次を目視する。(1) 6 枠が 3 列 × 2 行に並び、見出しが 1 行目 左から `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左から `Dependency Graph` / `Utilization` / `Scatter 3D` であること。(2) 各枠の中身の位置に `pending` が出ていること。(3) ロゴ画像・名前入力欄・Greet ボタンが無いこと。(4) ウィンドウを最大化・縮小しても 6 枠が表示領域に追随し、ページ全体に縦横どちらのスクロールバーも出ないこと。
+  - 静的には満たしている: `DashboardGrid` が `h-dvh grid-cols-3 grid-rows-2 overflow-hidden`、`Panel` が `min-h-0 overflow-hidden`。見出し 6 文字列と並び順は spec.md §5.7 の表と一致(レビュー確認済み)。

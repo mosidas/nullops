@@ -76,7 +76,7 @@
     - 対象ファイル: `frontend/src/app/page.tsx`(変更)
     - 仕様参照: spec.md §5.7 の 6 枠の表, §7 Requirement 1
     - 検証コマンド: `cd frontend && npm run lint` / `grep -rn "Greet" frontend/src` が 0 件（タスク 4.4 が `App.Greet` を削除する前提となる使用ゼロの確認）/ `wails dev` で 6 枠が 3 列 × 2 行に並び、spec.md §5.7 の表の 6 つの見出し文字列が表が定める位置（1 行目 左中右 = `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左中右 = `Dependency Graph` / `Utilization` / `Scatter 3D`）に出ていることを目視で照合する / ウィンドウを最大化・縮小しても 6 枠が表示領域に追随しページ全体にスクロールバーが出ないことを目視する（最小サイズの制限はタスク 4.5 で確認する）
-  - [ ] 1.6 `DashboardGrid` の子要素数が 6 でない分岐を実装する。`console.error` を 1 回出力し、受け取った子要素をすべて描画する（画面を空にしない）
+  - [x] 1.6 `DashboardGrid` の子要素数が 6 でない分岐を実装する。`console.error` を 1 回出力し、受け取った子要素をすべて描画する（画面を空にしない）
     _Requirements: 1.4_
     _Boundary: DashboardGrid_
     _Depends: 1.5_
@@ -279,7 +279,14 @@
 - 色の直値検査 `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/...` は、対象に `frontend/src/app` を含めるとトークンの正本である `globals.css` に必ずヒットする。判定は `--include="*.tsx" --include="*.ts"` で絞って行う(トークン定義そのものは違反ではない)。
 - `frontend/public/logo-universal.png` はタスク 1.5 でどこからも参照されなくなった。spec.md §2 が `frontend/public` の画像をスコープ外としているため本作業単位では削除しない(後続への申し送り)。
 
+- `DashboardGrid` は **Server Component のまま**にする(`'use client'` を付けない)。個数検査の `console.error` を描画中に呼ぶことで出力が 1 回に収まるためである。`'use client'` を付けると React Strict Mode(Next.js 16 の App Router で既定 `true`)が開発時に描画を 2 回呼び、受け入れ基準 1.4 の「1 回」を破る。`useEffect` へ逃がした場合も同じ理由で 2 回出る。
+- 上の帰結として、`DashboardGrid` の `console.error` の**出力先は WebView の DevTools ではない**。`wails dev` を動かしているターミナル(Next.js の開発サーバのログ)と、`wails build` のビルドログに出る。tasks.md 1.6 の検証コマンドは「DevTools のコンソール」と書いているが、spec.md §5.7 と受け入れ基準 1.4 は出力先を規定していないため、正本である spec.md 基準では合格。**確認するときはターミナルを見ること**。
+  - タスク 1.6 のレビュアーがリポジトリ外の隔離コピー(実リポジトリは非改変)で実測し、5 枠にしたときに `next build` で 1 件・`next dev` で 1 件、6 枠のときに 0 件、5 枠すべてが描画されることを確認済み。
+- タスク 5.2 で `Log Stream` の中身を差し替えるときは、`'use client'` を `LogStreamPanel` 側に置く(`DashboardGrid` や `page.tsx` へ広げない)。
+- `next dev` を回すと Next.js 16 が `tsconfig.json` を自動書き換えし、`AGENTS.md` / `CLAUDE.md` を自動生成することがある。spec.md §2 は `tsconfig.json` の変更を対象外としているため、`wails dev` の実行後は `git status` を確認し、これらの自動変更を**コミットに混ぜない**こと。
+
 ### 未検証項目(人間が確認すべきこと)
 
 - **タスク 1.5**(受け入れ基準 1.1 の見え方・8.3・8.4)。`wails dev` を起動し、次を目視する。(1) 6 枠が 3 列 × 2 行に並び、見出しが 1 行目 左から `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左から `Dependency Graph` / `Utilization` / `Scatter 3D` であること。(2) 各枠の中身の位置に `pending` が出ていること。(3) ロゴ画像・名前入力欄・Greet ボタンが無いこと。(4) ウィンドウを最大化・縮小しても 6 枠が表示領域に追随し、ページ全体に縦横どちらのスクロールバーも出ないこと。
   - 静的には満たしている: `DashboardGrid` が `h-dvh grid-cols-3 grid-rows-2 overflow-hidden`、`Panel` が `min-h-0 overflow-hidden`。見出し 6 文字列と並び順は spec.md §5.7 の表と一致(レビュー確認済み)。
+- **タスク 1.6** は隔離コピーでの実測で受け入れ基準 1.4 を確認済みのため、追加の人手確認は不要。ただし実リポジトリ上での目視は未実施。

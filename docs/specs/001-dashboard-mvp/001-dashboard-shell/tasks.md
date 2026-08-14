@@ -41,7 +41,7 @@
 
 ## タスク一覧
 
-- [ ] 1. (P) フロントエンドの土台（デザイントークンと 6 枠レイアウト）
+- [x] 1. (P) フロントエンドの土台（デザイントークンと 6 枠レイアウト）
   - [x] 1.1 `@theme` に spec.md §6.6 のトークンを定義し、配色をダーク 1 系統・既定の書体を等幅にする。`prefers-color-scheme` の分岐、`body { font-family: Arial, ... }`、および `--font-geist-*` を参照する既存の `@theme inline` を除去・置換する（タスク 1.2 で Geist の定義が消えるため、残すと `--font-mono` が解決できなくなる）
     _Requirements: 9.1, 9.5, 9.6, 9.7, 10.4_
     _Boundary: DesignTokens_
@@ -85,7 +85,7 @@
     - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で `page.tsx` の枠を一時的に 5 個へ減らし、DevTools のコンソールに `console.error` が 1 回だけ出て 5 枠が描画されることを確認したうえで 6 個へ戻す（6 個のときはコンソールに出力が無いことも確認する）
 
 - [ ] 2. (P) ログ行の型・フェーズ巡回・ログ生成器（Go / main パッケージ）
-  - [ ] 2.1 `Level` / `Phase` / `LogLine` と、不変条件を満たす値だけを作る非公開の完全コンストラクタを実装する（正常系）。このタスクでリポジトリ最初の Go テストを成立させる
+  - [x] 2.1 `Level` / `Phase` / `LogLine` と、不変条件を満たす値だけを作る非公開の完全コンストラクタを実装する（正常系）。このタスクでリポジトリ最初の Go テストを成立させる
     _Requirements: 4.2, 4.3, 10.2, 10.3_
     _Boundary: LogLine_
     - 対象ファイル: `logline.go`(新規), `logline_test.go`(新規)
@@ -284,6 +284,13 @@
   - タスク 1.6 のレビュアーがリポジトリ外の隔離コピー(実リポジトリは非改変)で実測し、5 枠にしたときに `next build` で 1 件・`next dev` で 1 件、6 枠のときに 0 件、5 枠すべてが描画されることを確認済み。
 - タスク 5.2 で `Log Stream` の中身を差し替えるときは、`'use client'` を `LogStreamPanel` 側に置く(`DashboardGrid` や `page.tsx` へ広げない)。
 - `next dev` を回すと Next.js 16 が `tsconfig.json` を自動書き換えし、`AGENTS.md` / `CLAUDE.md` を自動生成することがある。spec.md §2 は `tsconfig.json` の変更を対象外としているため、`wails dev` の実行後は `git status` を確認し、これらの自動変更を**コミットに混ぜない**こと。
+
+### Go 側の知見
+
+- パッケージ配置は spec.md §5 冒頭に従い、バインディングに現れる型(`LogLine` / `Level` / `Phase` / `DashboardSnapshot`)と `App` / `logSource` / `scenario` をリポジトリルートの `package main` に置く。`feed` パッケージからは `main` を import できないため、`logSource` は `feed.Source` を**構造的に満たすだけ**で `feed` を import しない。
+- `newLogLine(seq uint64, atMs int64, tool string, phase Phase, level Level, text string) (LogLine, error)`。タスク 2.1 の時点では error はつねに nil で、タスク 2.2 が先頭に検証分岐を足す。
+- `logline_test.go` の `TestLogLineJSON` が JSON の直列化結果を文字列リテラルで固定している。`LogLine` のフィールドを増やす後続作業単位はこの期待値の更新が要る(これはバインディング経由でフロントエンドの契約になるため、意図的に固定している)。
+- **`Seq == 0` の拒否の割り当て**: spec.md §6.1 は「`Seq` は 1 から始まり 1 ずつ増加する」を**生成時に強制する不変条件**に挙げ、受け入れ基準 4.4 は「不変条件を満たさない生成要求には error を返す」と定める。一方 tasks.md 2.2 が列挙する違反 5 件に `Seq` は含まれない(採番そのものは 4.1 としてタスク 2.5 の `logSource` の責務)。コンストラクタ単体では「1 ずつ増加」は原理的に検査できないが「1 から始まる」(= `Seq == 0` を拒否する)は検査できるため、**タスク 2.2 で 6 件目の違反として実装した**。タスク定義の列挙を減らす変更ではなく、spec.md の不変条件を満たすための追加である。
 
 ### 未検証項目(人間が確認すべきこと)
 

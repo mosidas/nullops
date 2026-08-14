@@ -62,7 +62,7 @@
     - 対象ファイル: `frontend/src/components/Panel.tsx`(新規)
     - 仕様参照: spec.md §5.7 `Panel`
     - 検証コマンド: `cd frontend && npm run lint` / `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components` が 0 件
-  - [ ] 1.4 `DashboardGrid` を実装する。3 列 × 2 行で 6 枠を配置し、コンテナの幅・高さに追随させ、ページ全体に縦横のスクロールバーを出さない。この段では画面に出ないため検証は静的検査に留め、目視はタスク 1.5 で行う
+  - [x] 1.4 `DashboardGrid` を実装する。3 列 × 2 行で 6 枠を配置し、コンテナの幅・高さに追随させ、ページ全体に縦横のスクロールバーを出さない。この段では画面に出ないため検証は静的検査に留め、目視はタスク 1.5 で行う
     _Requirements: 1.1_
     _Boundary: DashboardGrid_
     _Depends: 1.1_

@@ -48,7 +48,7 @@
     - 対象ファイル: `frontend/src/app/globals.css`(変更)
     - 仕様参照: spec.md §6.6
     - 検証コマンド: `cd frontend && npm ci && npm run lint` / コントラスト比は `python3 -c` で WCAG 2.1 の相対輝度式から `--color-text` と `--color-surface-1` の比を算出し、4.5:1 以上であることと算出値をコミット本文に記す / `grep -nEi "prefers-color-scheme|geist|Arial" frontend/src/app/globals.css` が 0 件
-  - [ ] 1.2 `metadata.title` を `nullops`、`metadata.description` を nullops を説明する文字列へ置き換え、`next/font/google` の `Geist` と `Geist_Mono` の import・`className` への適用をいずれも除去する
+  - [x] 1.2 `metadata.title` を `nullops`、`metadata.description` を nullops を説明する文字列へ置き換え、`next/font/google` の `Geist` と `Geist_Mono` の import・`className` への適用をいずれも除去する
     _Requirements: 1.5, 1.6, 9.5_
     _Boundary: AppShell_
     _Depends: 1.1_

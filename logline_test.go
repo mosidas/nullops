@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -52,6 +53,132 @@ func TestNewLogLine(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNewLogLineInvariantViolation(t *testing.T) {
+	tests := []struct {
+		name    string
+		seq     uint64
+		atMs    int64
+		tool    string
+		phase   Phase
+		level   Level
+		text    string
+		wantErr error
+	}{
+		{
+			name:    "Seq が 0",
+			seq:     0,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   LevelInfo,
+			text:    "Compiling serde v1.0.219",
+			wantErr: errLogLineSeqZero,
+		},
+		{
+			name:    "Tool が空",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "",
+			phase:   PhaseBuild,
+			level:   LevelInfo,
+			text:    "Compiling serde v1.0.219",
+			wantErr: errLogLineToolEmpty,
+		},
+		{
+			name:    "Text が空",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   LevelInfo,
+			text:    "",
+			wantErr: errLogLineTextEmpty,
+		},
+		{
+			name:    "Text が改行 (U+000A) を含む",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   LevelInfo,
+			text:    "Compiling serde v1.0.219\n",
+			wantErr: errLogLineTextNewline,
+		},
+		{
+			name:    "Text が改行 (U+000A) を中間に含む",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   LevelInfo,
+			text:    "Compiling serde v1.0.219\nCompiling anyhow v1.0.98",
+			wantErr: errLogLineTextNewline,
+		},
+		{
+			name:    "Text が改行 (U+000D) を含む",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   LevelInfo,
+			text:    "Compiling serde\rv1.0.219",
+			wantErr: errLogLineTextNewline,
+		},
+		{
+			name:    "Level が未定義",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   Level("fatal"),
+			text:    "Compiling serde v1.0.219",
+			wantErr: errLogLineLevelUnknown,
+		},
+		{
+			name:    "Level がゼロ値",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   PhaseBuild,
+			level:   Level(""),
+			text:    "Compiling serde v1.0.219",
+			wantErr: errLogLineLevelUnknown,
+		},
+		{
+			name:    "Phase が未定義",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   Phase("lint"),
+			level:   LevelInfo,
+			text:    "Compiling serde v1.0.219",
+			wantErr: errLogLinePhaseUnknown,
+		},
+		{
+			name:    "Phase がゼロ値",
+			seq:     1,
+			atMs:    1_700_000_000_000,
+			tool:    "cargo",
+			phase:   Phase(""),
+			level:   LevelInfo,
+			text:    "Compiling serde v1.0.219",
+			wantErr: errLogLinePhaseUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := newLogLine(tt.seq, tt.atMs, tt.tool, tt.phase, tt.level, tt.text)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error が一致しない: got %v, want %v", err, tt.wantErr)
+			}
+			if got != (LogLine{}) {
+				t.Errorf("不変条件違反なのに値を返した: got %+v", got)
+			}
+		})
+	}
 }
 
 func TestLevelAndPhaseValues(t *testing.T) {

@@ -91,7 +91,7 @@
     - 対象ファイル: `logline.go`(新規), `logline_test.go`(新規)
     - 仕様参照: spec.md §6.1
     - 検証コマンド: `go vet ./... && go test ./...`
-  - [ ] 2.2 完全コンストラクタの異常系を実装する。空の `Text` / 改行(U+000A・U+000D)を含む `Text` / 空の `Tool` / 未定義の `Level` / 未定義の `Phase` の各違反に個別のテストケースを割り当て、いずれも値を返さず error を返す
+  - [x] 2.2 完全コンストラクタの異常系を実装する。空の `Text` / 改行(U+000A・U+000D)を含む `Text` / 空の `Tool` / 未定義の `Level` / 未定義の `Phase` の各違反に個別のテストケースを割り当て、いずれも値を返さず error を返す
     _Requirements: 4.2, 4.3, 4.4_
     _Boundary: LogLine_
     _Depends: 2.1_
@@ -291,6 +291,11 @@
 - `newLogLine(seq uint64, atMs int64, tool string, phase Phase, level Level, text string) (LogLine, error)`。タスク 2.1 の時点では error はつねに nil で、タスク 2.2 が先頭に検証分岐を足す。
 - `logline_test.go` の `TestLogLineJSON` が JSON の直列化結果を文字列リテラルで固定している。`LogLine` のフィールドを増やす後続作業単位はこの期待値の更新が要る(これはバインディング経由でフロントエンドの契約になるため、意図的に固定している)。
 - **`Seq == 0` の拒否の割り当て**: spec.md §6.1 は「`Seq` は 1 から始まり 1 ずつ増加する」を**生成時に強制する不変条件**に挙げ、受け入れ基準 4.4 は「不変条件を満たさない生成要求には error を返す」と定める。一方 tasks.md 2.2 が列挙する違反 5 件に `Seq` は含まれない(採番そのものは 4.1 としてタスク 2.5 の `logSource` の責務)。コンストラクタ単体では「1 ずつ増加」は原理的に検査できないが「1 から始まる」(= `Seq == 0` を拒否する)は検査できるため、**タスク 2.2 で 6 件目の違反として実装した**。タスク定義の列挙を減らす変更ではなく、spec.md の不変条件を満たすための追加である。
+
+- `newLogLine` の不変条件違反は**非公開の sentinel error 6 本**(`errLogLineSeqZero` / `errLogLineToolEmpty` / `errLogLineTextEmpty` / `errLogLineTextNewline` / `errLogLineLevelUnknown` / `errLogLinePhaseUnknown`)で表し、`errors.Is` で判別できる。タスク 2.5 で候補集合を走査するテストは、`err != nil` を見るのではなくどの不変条件を破ったかまで表示できる。
+- `Level` / `Phase` に非公開の `valid() bool` がある(定義済み 4 値の `switch` 列挙)。タスク 2.5 で候補集合やフェーズ値を検査するときに再利用できる。
+- `AtMs` には spec.md §6.1 に不変条件の記載が無いため検証を入れていない(負値も 0 も受け付ける)。
+- 複数の不変条件を同時に破る入力では、引数順(Seq → Tool → Phase → Level → Text)で最初に当たった 1 件を返す。spec.md は複数違反の報告方法を規定していないため最小実装とした。
 
 ### 未検証項目(人間が確認すべきこと)
 

@@ -1,8 +1,8 @@
 ---
 name: dev-roadmap-planner
 description: unit 分解エージェント。依頼の全体を読み、作業単位(unit)への分解案(名前・範囲・完了条件・順序・依存・未確定・スコープ外)を独立文脈で組み立てて返す。最上流の工程のため、呼び出し側は分解の材料の読み込みをこのエージェントへ隔離する。
-model: opus
-effort: xhigh
+model: fable
+effort: high
 ---
 
 あなたは **unit 分解(Roadmap Planner)** サブエージェントです。依頼の全体を作業単位へ分ける案を組み立て、結果を返します。

@@ -79,7 +79,7 @@ unit: initialized → spec-generated →(gate: spec)→ spec-approved
 
 - `_Blocked:` の発生・最終検証 NO-GO・上流への差し戻しが必要な状況。
 - roadmap の未確定項目を unit 一覧へ移すとき(2.1)。
-- 実装完了後の知識 port への教訓の昇格(`../dev-implement/SKILL.md` 15.)。本番デプロイ等の不可逆操作はこのワークフローでは扱わない(dev-release とユーザーの明示承認に委ねる)。
+- 実装完了後の知識 port への教訓の昇格と、凍結文書との乖離の恒久情報への反映(`../dev-implement/SKILL.md` 15.)。本番デプロイ等の不可逆操作はこのワークフローでは扱わない(dev-release とユーザーの明示承認に委ねる)。
 
 > 承認の自動化(自己承認・自走)はこの composition の要件から除外する。必要な場合は、部品を直接束ねる拡張ワークフロー(Layer 3)として実現する(flow 同士は参照しない)。
 
@@ -150,6 +150,7 @@ unit: initialized → spec-generated →(gate: spec)→ spec-approved
    - `TASK_DEFECT`: `<engine> set-state tasks-generated` で差し戻す。
    - `NO_GO` / `UNVERIFIED` / `BLOCKED`: 状態を進めず、返却の `FINDINGS`・`UNVERIFIED`・`BLOCKED_REASON` をユーザーに報告して停止する(4.)。
 4. 返却の `LESSONS` が「なし」でなければ、知識 port への昇格の可否をユーザーに諮る(4.)。
+5. 返却の `DRIFT` が「なし」でなければ、恒久情報への反映(反映先と記述案)の可否をユーザーに諮り、承認を得た分を反映してコミットする。反映先はテスト・doc コメント・ADR・README・用語集であり、凍結済みの中間生成物は直さない(`../dev-core/references/durable-info.md` 3.)。
 
 ### Step 4: PR 作成と CI 追従
 

@@ -21,6 +21,6 @@
     "@types/react-dom": "^19",
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
-    "@biomejs/biome": "2.5.8"
+    "@biomejs/biome": "2.5.10"
   }
 }

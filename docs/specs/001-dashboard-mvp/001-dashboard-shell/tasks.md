@@ -235,7 +235,7 @@
     - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(変更)
     - 仕様参照: spec.md §6.6, §7 Requirement 9
     - 検証コマンド: `cd frontend && npm run lint` / `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components frontend/src/lib` が 0 件 / `wails dev` で 4 値が別々の色で出ること、タイムスタンプ列と本文列の左端が揃うこと（spec.md §3 前提 4）を目視する
-  - [ ] 5.6 `Snapshot()` の呼び出しが失敗した場合の分岐を実装する。例外を握って `console.error` を出力し、0 行の状態で開始する（画面にエラーを表示しない）
+  - [x] 5.6 `Snapshot()` の呼び出しが失敗した場合の分岐を実装する。例外を握って `console.error` を出力し、0 行の状態で開始する（画面にエラーを表示しない）
     _Requirements: 3.6_
     _Boundary: LogStreamPanel_
     _Depends: 5.2_
@@ -322,3 +322,5 @@
 - **タスク 5.5**(受け入れ基準 9.2・9.3・9.4)。`wails dev` を起動し、`Log Stream` 枠で次を目視する。(1) `info` / `warn` / `error` / `debug` の 4 値が互いに異なる色で出ること(それぞれ青・黄・赤・灰)。(2) 本文が等幅で表示されること。(3) 時刻列・工具列・重大度列・本文列の左端が、行が変わっても揃うこと。
   - 静的には満たしている: 重大度は `LEVEL_CLASS` で `text-level-info` / `-warn` / `-error` / `-debug` へ写し(色の直値は書かず `globals.css` の `@theme` を正本とする)、行は `font-mono` と固定幅の列(`w-20` / `w-16` / `w-12`)で組んでいる。`grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components frontend/src/lib` は 0 件。
   - 本文は折り返す(`whitespace-pre-wrap break-all`)。長い行で枠へ横スクロールを出さないためであり、折り返した 2 行目以降も本文列の左端に揃う。
+- **タスク 5.6**(受け入れ基準 3.6)。tasks.md の検証コマンドは `loadSnapshot` を一時的に reject させる操作を求めるが、**この操作は実行していない**(承認済みの方針: 画面を目視できない環境で、元へ戻し忘れる危険だけが残るため)。人間が確認する場合は `frontend/src/lib/feed.ts` の `loadSnapshot` を一時的に `Promise.reject(new Error('test'))` を返す実装へ差し替え、`wails dev` で (1) 画面が 0 行で始まり以後の差分で埋まること、(2) 枠にエラー表示が出ないこと、(3) DevTools のコンソールにだけ「初期スナップショットの取得に失敗した。0 行で開始する」が出ることを確かめ、**必ず元へ戻す**こと。
+  - 静的には満たしている: `loadSnapshot()` の `.catch` が `console.error` のみを行い、`lines` の初期値 `[]` のまま購読を続ける。

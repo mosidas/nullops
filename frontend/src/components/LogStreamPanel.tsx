@@ -91,9 +91,16 @@ export function LogStreamPanel(): React.JSX.Element {
       setLines((prev) => mergeBySeq(prev, batch));
     });
 
-    loadSnapshot().then((snapshot) => {
-      setLines((prev) => mergeBySeq(snapshot.log, prev));
-    });
+    loadSnapshot()
+      .then((snapshot) => {
+        setLines((prev) => mergeBySeq(snapshot.log, prev));
+      })
+      .catch((reason: unknown) => {
+        // 画面にエラーを出さず 0 行で開始する。以後の差分イベントで表示は埋まる
+        // （spec.md §5.6）。擬似ダッシュボードに本物のエラー表示を出すと、
+        // 実在の障害と見分けがつかなくなるため。
+        console.error('初期スナップショットの取得に失敗した。0 行で開始する:', reason);
+      });
 
     return unsubscribe;
   }, []);

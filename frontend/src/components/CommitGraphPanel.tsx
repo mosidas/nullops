@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { main } from '../../wailsjs/go/models';
+import { type CommitRowLayout, commitLaneX, commitRowLayout, commitRowY, visibleCommitCount } from '../lib/commitgraph';
 import { loadSnapshot, subscribeCommits } from '../lib/feed';
 
 /**
@@ -34,6 +35,42 @@ const FALLBACK_BACKGROUND_COLOR = 'transparent';
 
 /** 描画に使う色。マウント時に 1 度だけ解決する。 */
 type PanelColors = { commit: string; text: string; dim: string; background: string };
+
+/**
+ * レーンの上限。Go 側の commitMaxLanes と対にする。
+ *
+ * 配置の初回計算で使う。実際に使われているレーン数は描く直前に数え直す。
+ */
+const MAX_LANES = 4;
+
+/** レーン 0（主線）と、それ以外のレーンの不透明度（受け入れ基準 9.5）。 */
+const ALPHA_MAIN_LANE = 1.0;
+const ALPHA_SIDE_LANE = 0.5;
+
+/** コミットの点の半径（CSS ピクセル）と、レーンの間隔に対する上限の比。 */
+const DOT_RADIUS = 3;
+const DOT_RADIUS_LANE_RATIO = 0.32;
+
+/** 親への線の太さ（CSS ピクセル）。 */
+const EDGE_WIDTH = 1.4;
+
+/** 文字の大きさ（CSS ピクセル）と、ブランチ名と要約のあいだの余白。 */
+const FONT_SIZE = 11;
+const TEXT_GAP = 6;
+
+/** 右端に残す余白。文字が枠の縁に触れないようにする（受け入れ基準 11.3）。 */
+const RIGHT_PADDING = 6;
+
+/** 切り詰めた文字列の末尾に付ける印。画面に出る文字は英語のまま扱う。 */
+const ELLIPSIS = '...';
+
+/**
+ * 等幅フォントのトークンが解決できなかったときの退避先。
+ *
+ * 色と違い @theme のトークンは font-family であり、空文字のまま
+ * ctx.font へ渡すと代入が黙って無視される。
+ */
+const FALLBACK_FONT_FAMILY = 'monospace';
 
 /**
  * @theme のトークンを実行時に解決する。
@@ -164,6 +201,8 @@ export function CommitGraphPanel(): React.JSX.Element {
       dim: readToken('--color-text-dim', FALLBACK_DIM_COLOR),
       background: readToken('--color-surface-1', FALLBACK_BACKGROUND_COLOR),
     };
+    // 色と同じくマウント時に 1 度だけ組み立てる（受け入れ基準 11.6）。
+    const font = `${FONT_SIZE}px ${readToken('--font-mono', FALLBACK_FONT_FAMILY)}`;
 
     // 前フレームの描画条件。変化していなければ描き直さない（受け入れ基準 9.7）。
     let drawnSeq = -1;
@@ -191,7 +230,7 @@ export function CommitGraphPanel(): React.JSX.Element {
       drawnWidth = view.width;
       drawnHeight = view.height;
 
-      render(ctx, canvas, view, commits, colors);
+      render(ctx, canvas, view, commits, colors, font);
     };
 
     handle = window.requestAnimationFrame(frame);
@@ -220,6 +259,7 @@ function render(
   view: { width: number; height: number },
   commits: readonly Commit[],
   colors: PanelColors,
+  font: string,
 ): void {
   const scaleX = canvas.width / view.width;
   const scaleY = canvas.height / view.height;
@@ -231,4 +271,157 @@ function render(
   if (commits.length === 0) {
     return;
   }
+
+  // 行の高さはレーン数に依らないが、そこへ寄りかからないよう 2 段で決める。
+  // まず上限のレーン数で枠に収まる行数を出し、その範囲で実際に使われている
+  // レーン数を数え直してから配置を確定する（受け入れ基準 9.3）。
+  const provisional = commitRowLayout(view, MAX_LANES);
+  const count = Math.min(visibleCommitCount(view, provisional), commits.length);
+
+  let usedLanes = 1;
+  for (let i = 0; i < count; i += 1) {
+    usedLanes = Math.max(usedLanes, commits[i].lane + 1);
+  }
+  const layout = commitRowLayout(view, usedLanes);
+
+  // 親の行位置を引くための索引。描画範囲の外の親は線を引かない（受け入れ基準 9.4）。
+  const rowBySeq = new Map<number, number>();
+  for (let i = 0; i < count; i += 1) {
+    rowBySeq.set(commits[i].seq, i);
+  }
+
+  drawEdges(ctx, commits, count, layout, rowBySeq, colors);
+  drawDots(ctx, commits, count, layout, colors);
+  drawLabels(ctx, commits, count, layout, view, colors, font);
+}
+
+/** 各コミットから、描画範囲にある親へ線を引く。点より先に描いて円の下へ回す。 */
+function drawEdges(
+  ctx: CanvasRenderingContext2D,
+  commits: readonly Commit[],
+  count: number,
+  layout: CommitRowLayout,
+  rowBySeq: ReadonlyMap<number, number>,
+  colors: PanelColors,
+): void {
+  ctx.strokeStyle = colors.commit;
+  ctx.lineWidth = EDGE_WIDTH;
+
+  for (let i = 0; i < count; i += 1) {
+    const commit = commits[i];
+    const childX = commitLaneX(commit.lane, layout);
+    const childY = commitRowY(i, layout);
+
+    for (const parentSeq of commit.parents) {
+      const parentRow = rowBySeq.get(parentSeq);
+      if (parentRow === undefined) {
+        continue;
+      }
+      const parent = commits[parentRow];
+      const parentX = commitLaneX(parent.lane, layout);
+      const parentY = commitRowY(parentRow, layout);
+
+      // 線の濃さは子と親の浅いほうのレーンに合わせる。主線から枝が出る箇所を
+      // 薄い側に引きずられて見失わないようにするため。
+      ctx.globalAlpha = laneAlpha(Math.min(commit.lane, parent.lane));
+      ctx.beginPath();
+      ctx.moveTo(childX, childY);
+      if (childX === parentX) {
+        ctx.lineTo(parentX, parentY);
+      } else {
+        // レーンをまたぐときだけ曲げる。折れ線にすると分岐とマージの向きが
+        // 直角になり、履歴の枝分かれとして読みにくい。
+        ctx.bezierCurveTo(childX, (childY + parentY) / 2, parentX, (childY + parentY) / 2, parentX, parentY);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** 各コミットの点を、その Lane に対応する列へ置く。 */
+function drawDots(
+  ctx: CanvasRenderingContext2D,
+  commits: readonly Commit[],
+  count: number,
+  layout: CommitRowLayout,
+  colors: PanelColors,
+): void {
+  // レーンが詰まった狭い枠でも円どうしが重ならないよう、間隔に対して頭打ちにする。
+  const radius = Math.min(DOT_RADIUS, layout.laneStep * DOT_RADIUS_LANE_RATIO);
+  ctx.fillStyle = colors.commit;
+
+  for (let i = 0; i < count; i += 1) {
+    const commit = commits[i];
+    ctx.globalAlpha = laneAlpha(commit.lane);
+    ctx.beginPath();
+    ctx.arc(commitLaneX(commit.lane, layout), commitRowY(i, layout), radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** 各行にブランチ名と要約を添える。いずれも枠の幅で切り詰める（受け入れ基準 9.6）。 */
+function drawLabels(
+  ctx: CanvasRenderingContext2D,
+  commits: readonly Commit[],
+  count: number,
+  layout: CommitRowLayout,
+  view: { width: number; height: number },
+  colors: PanelColors,
+  font: string,
+): void {
+  ctx.font = font;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+
+  const rightEdge = view.width - RIGHT_PADDING;
+
+  for (let i = 0; i < count; i += 1) {
+    const commit = commits[i];
+    const y = commitRowY(i, layout);
+
+    // ブランチ名は要約より先に切る。どの枝の変更かのほうが、要約の末尾より
+    // 履歴として読む価値が高い。
+    ctx.fillStyle = colors.dim;
+    const branch = truncateToWidth(ctx, commit.branch, rightEdge - layout.textOriginX);
+    ctx.fillText(branch, layout.textOriginX, y);
+
+    const summaryX = layout.textOriginX + ctx.measureText(branch).width + TEXT_GAP;
+    ctx.fillStyle = colors.text;
+    ctx.fillText(truncateToWidth(ctx, commit.summary, rightEdge - summaryX), summaryX, y);
+  }
+}
+
+/** レーン 0（主線）を最も強く描く（受け入れ基準 9.5)。 */
+function laneAlpha(lane: number): number {
+  return lane === 0 ? ALPHA_MAIN_LANE : ALPHA_SIDE_LANE;
+}
+
+/**
+ * 指定した幅に収まるところまで文字列を切り詰め、切ったことを印で示す。
+ *
+ * 二分探索で測るのは、等幅フォントが解決できず 1 文字の幅が一定にならない
+ * 場合でも正しく収めるため。1 行あたりの measureText の回数は log に留まる。
+ */
+function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (maxWidth <= 0) {
+    return '';
+  }
+  if (ctx.measureText(text).width <= maxWidth) {
+    return text;
+  }
+
+  let fits = 0;
+  let upper = text.length;
+  while (fits < upper) {
+    const mid = Math.ceil((fits + upper) / 2);
+    if (ctx.measureText(text.slice(0, mid) + ELLIPSIS).width <= maxWidth) {
+      fits = mid;
+    } else {
+      upper = mid - 1;
+    }
+  }
+  // 印すら収まらないときは何も描かない。印だけが並ぶ行にしても情報が無い。
+  return fits === 0 ? '' : text.slice(0, fits) + ELLIPSIS;
 }

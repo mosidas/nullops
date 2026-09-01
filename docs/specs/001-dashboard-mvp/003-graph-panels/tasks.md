@@ -128,7 +128,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §5.9 依存グラフの配置関数, §7 Requirement 10.1・10.2・10.3
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`
 
-- [ ] 5. `CommitGraphPanel` の描画
+- [x] 5. `CommitGraphPanel` の描画
   - [x] 5.1 パネルの骨格・購読とスナップショットの併合・寸法追随を作る
     _Requirements: 8.1, 8.2, 8.4, 8.5, 11.1, 11.2, 11.3, 11.7_
     _Boundary: CommitGraphPanel_
@@ -137,7 +137,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/components/CommitGraphPanel.tsx`(新規)
     - 仕様参照: spec.md §5.6 `CommitGraphPanel`, §7 Requirement 8.1・8.2・8.4・8.5・11.1・11.2・11.3・11.7
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`
-  - [ ] 5.2 コミットグラフの描画(レーンの点と親への線・ブランチ名と要約・条件付き再描画)を作る
+  - [x] 5.2 コミットグラフの描画(レーンの点と親への線・ブランチ名と要約・条件付き再描画)を作る
     _Requirements: 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 11.4, 11.5, 11.6_
     _Boundary: CommitGraphPanel_
     _Depends: 5.1, 4.2_

@@ -3,9 +3,20 @@
 import { useEffect, useRef } from 'react';
 import type { main } from '../../wailsjs/go/models';
 import { loadSnapshot, subscribeScatter } from '../lib/feed';
+import { type Projected, projectPoint, SCATTER_PITCH } from '../lib/project';
+
+/**
+ * このパネルが読む点群の形。
+ *
+ * 生成された main.ScatterCloud はメソッド convertValues を持つクラスだが、
+ * イベントで届く payload も Snapshot の戻り値も素の JSON であって
+ * インスタンスではない。読む項目だけに絞った型にすることで、空の点群を
+ * リテラルで書けるようにする（キャストで嘘をつかない）。
+ */
+type Cloud = Pick<main.ScatterCloud, 'seq' | 'points'>;
 
 /** 点群が未着のあいだの描画対象。毎回作り直さないため、モジュールの定数として持つ。 */
-const EMPTY_CLOUD: main.ScatterCloud = { seq: 0, points: [] } as main.ScatterCloud;
+const EMPTY_CLOUD: Cloud = { seq: 0, points: [] };
 
 /** ヨーの角速度（ラジアン毎秒）。1 周におよそ 26 秒かかる速さ。 */
 const YAW_RATE_RAD_PER_SEC = 0.24;
@@ -19,22 +30,127 @@ const YAW_RATE_RAD_PER_SEC = 0.24;
 const MAX_FRAME_MS = 100;
 
 /**
+ * 回転後の Z がとりうる絶対値の上限。
+ *
+ * モデル座標は各軸 -1〜1 の立方体に収まるため（spec.md §6.1）、
+ * どう回しても原点からの距離は立方体の対角線の半分 √3 を超えない。
+ * 奥行きを 0〜1 へ正規化する基準に使う。
+ */
+const DEPTH_LIMIT = Math.sqrt(3);
+
+/** 描画領域の短辺に対する点の半径の比。 */
+const POINT_RADIUS_RATIO = 0.012;
+
+/** 点の半径の下限（CSS ピクセル）。小さい枠でも点が消えないようにする。 */
+const MIN_POINT_RADIUS = 0.6;
+
+/** 最も奥の点・最も手前の点の不透明度。 */
+const ALPHA_FAR = 0.18;
+const ALPHA_NEAR = 1.0;
+
+/** 重み W が 0 の点に残す割合。0 にすると W が小さい点が完全に消える。 */
+const WEIGHT_FLOOR = 0.45;
+
+/**
+ * トークンの解決に失敗したときの退避先（spec.md §7 9.2）。
+ *
+ * 16 進の直値を置かないのは、色の正本を globals.css の @theme に一本化する
+ * 規律のため（spec.md §7 9.1）。背景を transparent にすると Panel 側の
+ * 背景がそのまま透けるので、退避しても画は破綻しない。
+ */
+const FALLBACK_POINT_COLOR = 'white';
+const FALLBACK_BACKGROUND_COLOR = 'transparent';
+
+/** 描画に使う色。マウント時に 1 度だけ解決する。 */
+type PanelColors = { point: string; background: string };
+
+/**
+ * @theme のトークンを実行時に解決する。
+ *
+ * Canvas 2D は CSS クラスを解釈せず色文字列を要求するため、トークンへ従う
+ * 手段が getComputedStyle による解決に限られる（spec.md §3 前提 4）。
+ */
+function readToken(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value === '' ? fallback : value;
+}
+
+/** 1 点ぶんの描画材料。フレームごとに作り直さないよう、器を使い回す。 */
+type Plotted = { point: main.ScatterPoint; projected: Projected };
+
+/** 奥行きの昇順（奥→手前）に並べる比較関数。毎フレーム作らないため外に置く。 */
+function byDepthAscending(a: Plotted, b: Plotted): number {
+  return a.projected.depth - b.projected.depth;
+}
+
+/**
  * 1 フレームを描く。
  *
  * 描画対象は canvas のバッキングストアで、投影は CSS ピクセルで行うため、
  * devicePixelRatio ぶんの拡大は変換行列で吸収する。
+ *
+ * `buffer` は呼び出し側が持ち回る作業領域。毎フレーム配列を作らないための器で
+ * あり、内容はこの関数が上書きする（CLAUDE.md TypeScript 規約）。
  */
 function render(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   view: { width: number; height: number },
-  _cloud: main.ScatterCloud,
-  _yaw: number,
+  cloud: Cloud,
+  yaw: number,
+  colors: PanelColors,
+  buffer: Plotted[],
 ): void {
   const scaleX = canvas.width / view.width;
   const scaleY = canvas.height / view.height;
   ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
   ctx.clearRect(0, 0, view.width, view.height);
+  ctx.fillStyle = colors.background;
+  ctx.fillRect(0, 0, view.width, view.height);
+
+  const points = cloud.points;
+  if (points.length === 0) {
+    return;
+  }
+
+  // 点数は固定（spec.md §3 前提 3）だが、空の点群から最初の点群へ移る瞬間だけ
+  // 長さが変わる。既存の器はそのまま使い、足りないぶんだけ作る。
+  if (buffer.length !== points.length) {
+    buffer.length = points.length;
+  }
+  for (let i = 0; i < points.length; i += 1) {
+    const point = points[i];
+    const projected = projectPoint(point, yaw, SCATTER_PITCH, view);
+    const entry = buffer[i];
+    if (entry === undefined) {
+      buffer[i] = { point, projected };
+    } else {
+      entry.point = point;
+      entry.projected = projected;
+    }
+  }
+
+  // 奥から手前へ描くことで、手前の点が奥の点に重なる（spec.md §7 6.4）。
+  buffer.sort(byDepthAscending);
+
+  const baseRadius = Math.min(view.width, view.height) * POINT_RADIUS_RATIO;
+  ctx.fillStyle = colors.point;
+  for (const { point, projected } of buffer) {
+    // 0（奥）〜1（手前）。透視投影の scale と同じ向きに動くが、
+    // 焦点距離に依存しない値にするため回転後の Z から求める。
+    const nearness = (projected.depth + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
+    const weight = WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * point.w;
+
+    // 奥の点ほど小さく淡くする（spec.md §7 6.5）。
+    const radius = Math.max(baseRadius * projected.scale * weight, MIN_POINT_RADIUS);
+    ctx.globalAlpha = (ALPHA_FAR + (ALPHA_NEAR - ALPHA_FAR) * nearness) * weight;
+
+    ctx.beginPath();
+    ctx.arc(projected.sx, projected.sy, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 次のフレームの clearRect / fillRect が半透明にならないよう戻す。
+  ctx.globalAlpha = 1;
 }
 
 /**
@@ -48,7 +164,7 @@ export function Scatter3DPanel(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // 点群を state に置かないのは、毎秒の更新で React の再描画を起こす必要がないため。
   // 描画は requestAnimationFrame のループが ref を読んで行う（CLAUDE.md TypeScript 規約）。
-  const cloudRef = useRef<main.ScatterCloud>(EMPTY_CLOUD);
+  const cloudRef = useRef<Cloud>(EMPTY_CLOUD);
   // 描画領域の CSS 上の寸法。バッキングストアの画素数と分けて持つのは、
   // 投影の計算を CSS ピクセルで行い、devicePixelRatio を変換行列側へ寄せるため。
   const viewRef = useRef({ width: 0, height: 0 });
@@ -131,6 +247,15 @@ export function Scatter3DPanel(): React.JSX.Element {
       return;
     }
 
+    // 色はマウント時に 1 度だけ読む。毎フレーム読むと描画のたびに
+    // スタイル計算が走る（spec.md §8 色の解決）。
+    const colors: PanelColors = {
+      point: readToken('--color-accent-scatter', FALLBACK_POINT_COLOR),
+      background: readToken('--color-surface-1', FALLBACK_BACKGROUND_COLOR),
+    };
+    // 投影結果の器。ループの外に置いてフレームごとの確保を避ける。
+    const buffer: Plotted[] = [];
+
     let yaw = 0;
     let prevMs: number | null = null;
     let handle = 0;
@@ -151,7 +276,7 @@ export function Scatter3DPanel(): React.JSX.Element {
         return;
       }
 
-      render(ctx, canvas, view, cloudRef.current, yaw);
+      render(ctx, canvas, view, cloudRef.current, yaw, colors, buffer);
     };
 
     handle = window.requestAnimationFrame(frame);

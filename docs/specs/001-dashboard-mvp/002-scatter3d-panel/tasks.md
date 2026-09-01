@@ -88,7 +88,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §5.4 フロントエンドの購読
     - 検証コマンド: `cd frontend && npm run lint`
 
-- [ ] 3. `Scatter3DPanel` の描画
+- [x] 3. `Scatter3DPanel` の描画
   - [x] 3.1 パネルの骨格と、購読・スナップショットの併合を作る
     _Requirements: 5.1, 5.2, 5.3_
     _Boundary: Scatter3DPanel_
@@ -113,7 +113,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/components/Scatter3DPanel.tsx`(変更)
     - 仕様参照: spec.md §7 Requirement 7, §8 実現方針(回転の駆動)
     - 検証コマンド: `cd frontend && npm run lint`
-  - [ ] 3.4 点群の描画(奥行き順・大きさと不透明度・トークンの解決)を作る
+  - [x] 3.4 点群の描画(奥行き順・大きさと不透明度・トークンの解決)を作る
     _Requirements: 6.4, 6.5, 9.1, 9.2_
     _Boundary: Scatter3DPanel_
     _Depends: 3.3, 2.1_
@@ -156,3 +156,4 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 | 3.1 `Scatter3DPanel` の骨格と購読 | `d189649` |
 | 3.2 キャンバスの寸法の追随 | `076fd49` |
 | 3.3 `requestAnimationFrame` の回転ループ | `ea66ea2` |
+| 3.4 点群の描画(奥行き順・大きさと不透明度・トークンの解決) | (このコミット) |

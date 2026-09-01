@@ -39,12 +39,39 @@ function compareSeq(a: main.LogLine, b: main.LogLine): number {
 // ならないことがあり、追従が外れて止まって見えるため。
 const FOLLOW_THRESHOLD_PX = 16;
 
+// 重大度ごとの文字色。トークンの正本は globals.css の @theme で、ここには色の直値を書かない
+// （spec.md §6.6）。クラス名を文字列連結で組み立てないのは、Tailwind が原文から
+// クラス名を拾うため、動的に作った名前が出力に含まれないため。
+const LEVEL_CLASS: Record<string, string> = {
+  info: 'text-level-info',
+  warn: 'text-level-warn',
+  error: 'text-level-error',
+  debug: 'text-level-debug',
+};
+
+// 未知の重大度は本文と同じ色にする。画面にエラーを出さない（spec.md §8）。
+const LEVEL_CLASS_FALLBACK = 'text-text-dim';
+
+// 時刻の表記。行ごとに Intl のインスタンスを作らないため、モジュールの定数として持つ。
+const TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
 // map へ毎回新しい関数を渡さないため、モジュールの定数として持つ
 // （CLAUDE.md TypeScript 規約。行の追加は 1 秒に数回起きる）。
 function renderLine(line: main.LogLine): React.JSX.Element {
   return (
-    <li key={line.seq}>
-      {line.tool} {line.text}
+    // 各列を固定幅にするのは、列の左端を行によらず揃えるため（spec.md §3 前提 4）。
+    // tabular-nums は等幅数字を選び、時刻の桁が動くのを防ぐ。
+    // 本文を折り返すのは、1 行が長いときに枠へ横スクロールを出さないため。
+    <li key={line.seq} className="flex gap-2 font-mono text-xs leading-5">
+      <span className="w-20 shrink-0 tabular-nums text-text-dim">{TIME_FORMAT.format(line.atMs)}</span>
+      <span className="w-16 shrink-0 truncate text-text-dim">{line.tool}</span>
+      <span className={`w-12 shrink-0 ${LEVEL_CLASS[line.level] ?? LEVEL_CLASS_FALLBACK}`}>{line.level}</span>
+      <span className="min-w-0 whitespace-pre-wrap break-all text-text">{line.text}</span>
     </li>
   );
 }

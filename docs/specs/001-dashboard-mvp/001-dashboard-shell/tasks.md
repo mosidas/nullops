@@ -228,7 +228,7 @@
     - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(変更)
     - 仕様参照: spec.md §7 Requirement 2.7, 8.5
     - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で下端付近では追従し、上方向へスクロールすると位置が保たれること、ページ全体にスクロールバーが出ないことを目視する
-  - [ ] 5.5 重大度と書体の表示を実装する。`LogLine.Level` の 4 値に `--color-level-info` / `-warn` / `-error` / `-debug` の異なる色を割り当て、本文に `--font-mono` を適用する。色の直値を書かない
+  - [x] 5.5 重大度と書体の表示を実装する。`LogLine.Level` の 4 値に `--color-level-info` / `-warn` / `-error` / `-debug` の異なる色を割り当て、本文に `--font-mono` を適用する。色の直値を書かない
     _Requirements: 9.2, 9.3, 9.4_
     _Boundary: LogStreamPanel_
     _Depends: 5.3_
@@ -319,3 +319,6 @@
 - **タスク 5.4**(受け入れ基準 2.7・8.5)。`wails dev` を起動し、`Log Stream` 枠で次の両分岐を目視する。(1) 下端に居るあいだは行の追加に合わせて表示が下端に張り付くこと。(2) 枠の中を上へスクロールすると位置が保たれ、追従しないこと。(3) 下端付近(16 ピクセル以内)まで戻すと追従が再開すること。(4) いずれの操作でもページ全体には縦横のスクロールバーが出ないこと。
   - 静的には満たしている: `LogStreamPanel` が自前の `h-full overflow-y-auto` のスクロール領域を持ち、`onScroll` で下端からの距離が 16 ピクセル以内かを `followingRef` に記録し、`useLayoutEffect` が追従中だけ `scrollTop = scrollHeight` を書く。
   - 追従の判定を state ではなく ref に置いているため、スクロール中に再描画は起きない。
+- **タスク 5.5**(受け入れ基準 9.2・9.3・9.4)。`wails dev` を起動し、`Log Stream` 枠で次を目視する。(1) `info` / `warn` / `error` / `debug` の 4 値が互いに異なる色で出ること(それぞれ青・黄・赤・灰)。(2) 本文が等幅で表示されること。(3) 時刻列・工具列・重大度列・本文列の左端が、行が変わっても揃うこと。
+  - 静的には満たしている: 重大度は `LEVEL_CLASS` で `text-level-info` / `-warn` / `-error` / `-debug` へ写し(色の直値は書かず `globals.css` の `@theme` を正本とする)、行は `font-mono` と固定幅の列(`w-20` / `w-16` / `w-12`)で組んでいる。`grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components frontend/src/lib` は 0 件。
+  - 本文は折り返す(`whitespace-pre-wrap break-all`)。長い行で枠へ横スクロールを出さないためであり、折り返した 2 行目以降も本文列の左端に揃う。

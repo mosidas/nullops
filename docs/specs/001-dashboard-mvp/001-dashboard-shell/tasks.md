@@ -163,7 +163,7 @@
     - 検証コマンド: `go vet ./... && go test -race ./...` / `Run` の復帰後に擬似 `Emitter` の記録件数が増えないこと、`runtime.NumGoroutine()` が `Run` の呼び出し前の水準へ戻ることを検査する
 
 - [ ] 4. アプリへの結線（ライフサイクル・スナップショット・イベント送信）
-  - [ ] 4.1 `feed.Emitter` の Wails 実装（`runtime.EventsEmit` へ委譲）を追加し、`App` を spec.md §6.5 の形（ctx / cancel / done）へ改める。`startup` は `context.Background()` から派生させたキャンセル可能な context を生成し、`scenario`(minHold 15 秒・maxHold 45 秒)と `logSource`(capacity 500・専用の `*rand.Rand`)を組み立て、`logSource` を登録した `Runner` をその context で開始して `nullops:log` イベントに `LogLine` の配列を送出する
+  - [x] 4.1 `feed.Emitter` の Wails 実装（`runtime.EventsEmit` へ委譲）を追加し、`App` を spec.md §6.5 の形（ctx / cancel / done）へ改める。`startup` は `context.Background()` から派生させたキャンセル可能な context を生成し、`scenario`(minHold 15 秒・maxHold 45 秒)と `logSource`(capacity 500・専用の `*rand.Rand`)を組み立て、`logSource` を登録した `Runner` をその context で開始して `nullops:log` イベントに `LogLine` の配列を送出する
     _Requirements: 2.1, 5.3, 7.1, 7.2_
     _Boundary: App_
     _Depends: 2.6, 3.3_

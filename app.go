@@ -2,23 +2,74 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"math/rand/v2"
+	"time"
+
+	"nullops/feed"
 )
 
-// App struct
+// 擬似的な作業フェーズの保持時間の範囲。
+const (
+	appMinHold = 15 * time.Second
+	appMaxHold = 45 * time.Second
+)
+
+// appLogCapacity は保持するログ行の上限。
+const appLogCapacity = 500
+
+// App はアプリのライフサイクルを持ち、Wails のバインディング対象になる。
 type App struct {
-	ctx context.Context
+	ctx    context.Context    // Wails の ctx。EventsEmit に渡す
+	cancel context.CancelFunc // 自前の ctx を止める
+	done   chan struct{}      // Runner の終了を待つ
+
+	logs *logSource
+
+	// newEmitter は送信先の Emitter を作る。
+	//
+	// Wails ランタイムを起動せずにテストできるようにするための接合点であり、
+	// 既定は runtime.EventsEmit へ委譲する実装。
+	newEmitter func(ctx context.Context) feed.Emitter
 }
 
-// NewApp creates a new App application struct
+// NewApp は App を作る。
 func NewApp() *App {
-	return &App{}
+	return &App{newEmitter: newWailsEmitter}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// startup はアプリの起動時に呼ばれ、擬似データの生成と送出を開始する。
+//
+// Run に渡す context を引数の ctx から派生させず context.Background() から作るのは、
+// Wails v2.13.0 が OnStartup へ渡す context がキャンセルされないため。
+// この ctx を待つゴルーチンはウィンドウを閉じても止まらない。
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// scenario と logSource は別々の mutex で自身を守るため、*rand.Rand を共有しない。
+	sc := newScenario(appMinHold, appMaxHold, newSeededRand(), time.Now)
+	a.logs = newLogSource(appLogCapacity, newSeededRand(), sc)
+
+	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs)
+	if err != nil {
+		// 事前条件はこの呼び出し位置で静的に満たされる。到達はプログラマの誤り。
+		panic("feed.NewRunner の事前条件を満たしていない: " + err.Error())
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	a.cancel = cancel
+	a.done = make(chan struct{})
+	go func() {
+		defer close(a.done)
+		runner.Run(runCtx)
+	}()
+}
+
+// newSeededRand は生成器ごとに独立した *rand.Rand を作る。
+//
+// 種は math/rand/v2 のグローバル生成器（自動で種が入る）から取る。
+// 画面に出る擬似データの見え方が起動ごとに変わればよく、暗号強度は要らない。
+func newSeededRand() *rand.Rand {
+	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 }
 
 // domReady is called after front-end resources have been loaded
@@ -40,5 +91,5 @@ func (a *App) shutdown(ctx context.Context) {
 
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+	return "Hello " + name + ", It's show time!"
 }

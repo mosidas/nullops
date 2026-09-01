@@ -214,7 +214,7 @@
     - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(新規), `frontend/src/app/page.tsx`(変更)
     - 仕様参照: spec.md §7 Requirement 3, §5.6
     - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で起動直後に行が表示され、`Seq` の重複・欠落が無いことを DevTools で確認する
-  - [ ] 5.3 受信した行を表示の末尾へ追加し、表示行数を最新 300 行に制限する。再描画のたびに新しい関数・オブジェクトを作らない（`CLAUDE.md` TypeScript 規約）
+  - [x] 5.3 受信した行を表示の末尾へ追加し、表示行数を最新 300 行に制限する。再描画のたびに新しい関数・オブジェクトを作らない（`CLAUDE.md` TypeScript 規約）
     _Requirements: 2.5, 2.6_
     _Boundary: LogStreamPanel_
     _Depends: 5.2_
@@ -314,3 +314,5 @@
   - 注意: `window.outerWidth` はウィンドウ全体、`innerWidth` は WebView の内側を指す。macOS ではタイトルバーの分だけ `outerHeight` が `innerHeight` より大きくなるため、900 と比べるのは `outerHeight` の方である。
 - **タスク 5.2**(受け入れ基準 3.1・3.5)。`wails dev` を起動し、DevTools で次を確認する。(1) 起動直後に `Log Stream` 枠へ行が表示されること。(2) `$$('#__next li')` などで拾った行の `Seq` に重複と欠落が無いこと(Seq は連番なので `key` の並びが 1 ずつ増えることを見る)。
   - 静的には満たしている: 購読を先に開始してから `loadSnapshot()` を呼び、`Seq` を鍵にした `Map` で重複を落として昇順に並べている。取得中に届いた行も `setLines` の関数形で保持される。
+- **タスク 5.3**(受け入れ基準 2.5・2.6)。`wails dev` を 2 分以上流し、DevTools のコンソールで `document.querySelectorAll("li").length` が 300 を超えないことを確認する。
+  - 静的には満たしている: `mergeBySeq` が併合後に末尾 300 行へ切り詰める。Go 側の保持上限は 500 行なので、スナップショットだけでも上限に当たる。

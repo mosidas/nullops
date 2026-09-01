@@ -76,7 +76,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `go vet ./...`, `go test ./...`, `go test -race ./...`
 
 - [ ] 2. Go 側の依存グラフの契約と生成器
-  - [ ] 2.1 `GraphNode`・`GraphEdge`・`DependencyGraph` の型と不変条件の強制を作る
+  - [x] 2.1 `GraphNode`・`GraphEdge`・`DependencyGraph` の型と不変条件の強制を作る
     _Requirements: 5.1, 5.2, 5.3, 5.4_
     _Boundary: GraphNode_
     _Interfaces: Produces `GraphNode{ID string; X, Y, Load float64; Health string}` / `GraphEdge{From, To string; Flow float64}` / `DependencyGraph{Seq uint64; Nodes []GraphNode; Edges []GraphEdge}` / `newGraphNode(id string, x, y, load float64, health string) (GraphNode, error)` / `newGraphEdge(from, to string, flow float64) (GraphEdge, error)` / `HealthOK` / `HealthWarn` / `HealthDown` / `errGraphNodeIDEmpty` / `errGraphValueOutOfRange` / `errGraphValueNotFinite` / `errGraphHealthUnknown` / `errGraphEdgeEndpoints`_
@@ -223,4 +223,5 @@ spec.md §7 の全受け入れ基準が、いずれかのタスクから参照�
 | サブタスク | コミット |
 | :- | :- |
 | 1.1 `Commit` の型と不変条件の強制 | `038e9c6` |
-| 1.2 `commitSource` | `2974523` |
+| 1.2 `commitSource` | `d8509e7` |
+| 2.1 グラフの型と不変条件の強制 | `8f825e5` |

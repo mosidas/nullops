@@ -52,6 +52,58 @@ export function subscribeScatter(onCloud: (cloud: main.ScatterCloud) => void): (
   });
 }
 
+/** コミットフィードのイベント名。Go 側の `commitEventName` と対になる。 */
+const COMMIT_EVENT = 'nullops:commit';
+
+/**
+ * 擬似コミットの差分イベントを購読する。戻り値を呼ぶとこの購読だけが解除される。
+ *
+ * subscribeLog と同じく差分の配列（長さ 1）が届く（spec.md §5.4）。
+ */
+export function subscribeCommits(onBatch: (commits: main.Commit[]) => void): () => void {
+  // Go 側は EventsEmit へ payload を 1 個だけ渡すため、受け取るのは data[0] の []Commit。
+  return EventsOn(COMMIT_EVENT, (...data: unknown[]) => {
+    const commits = data[0];
+    if (!Array.isArray(commits)) {
+      // 擬似ダッシュボードに本物のエラーを出さない（spec.md §5.5）。異常はコンソールに留める。
+      console.error(`${COMMIT_EVENT} のペイロードが配列ではない:`, commits);
+      return;
+    }
+    onBatch(commits as main.Commit[]);
+  });
+}
+
+/** 依存グラフフィードのイベント名。Go 側の `graphEventName` と対になる。 */
+const GRAPH_EVENT = 'nullops:graph';
+
+/** payload が依存グラフの形をしているかを絞り込む。`any` を使わず `unknown` から検査する。 */
+function isDependencyGraph(value: unknown): value is main.DependencyGraph {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as { nodes?: unknown; edges?: unknown };
+  return Array.isArray(candidate.nodes) && Array.isArray(candidate.edges);
+}
+
+/**
+ * 依存グラフの更新イベントを購読する。戻り値を呼ぶとこの購読だけが解除される。
+ *
+ * subscribeScatter と同じく、イベント名に紐づく全リスナーを外す側の API を
+ * 使わない（spec.md §5.5）。
+ */
+export function subscribeGraph(onGraph: (graph: main.DependencyGraph) => void): () => void {
+  // Go 側は EventsEmit へ payload を 1 個だけ渡すため、受け取るのは data[0] の DependencyGraph。
+  return EventsOn(GRAPH_EVENT, (...data: unknown[]) => {
+    const graph = data[0];
+    if (!isDependencyGraph(graph)) {
+      // 擬似ダッシュボードに本物のエラーを出さない（spec.md §5.5）。異常はコンソールに留める。
+      console.error(`${GRAPH_EVENT} のペイロードがグラフの形ではない:`, graph);
+      return;
+    }
+    onGraph(graph);
+  });
+}
+
 /**
  * 起動直後の初期表示を 1 回で取得する。副作用は無く、いつ・何回呼んでもよい。
  *

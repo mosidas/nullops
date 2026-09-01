@@ -102,8 +102,8 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §5.3 `App.Snapshot`, §5.4 送信イベント, §6.7 `DashboardSnapshot`, §7 Requirement 7
     - 検証コマンド: `go vet ./...`, `go test ./...`, `wails build`
 
-- [ ] 4. フロントエンドの購読と配置の純関数(Go 側の契約に依存する薄い層)
-  - [ ] 4.1 `subscribeCommits`・`subscribeGraph` を `feed.ts` へ足す
+- [x] 4. フロントエンドの購読と配置の純関数(Go 側の契約に依存する薄い層)
+  - [x] 4.1 `subscribeCommits`・`subscribeGraph` を `feed.ts` へ足す
     _Requirements: 8.6_
     _Boundary: feed_
     _Depends: 3.1_
@@ -111,7 +111,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/lib/feed.ts`(変更)
     - 仕様参照: spec.md §5.5 フロントエンドの購読, §7 Requirement 8.6
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`
-  - [ ] 4.2 コミットグラフの配置の純関数を作る
+  - [x] 4.2 コミットグラフの配置の純関数を作る
     _Requirements: 9.1, 9.2_
     _Boundary: commitgraph_
     _Depends: 3.1_
@@ -119,7 +119,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/lib/commitgraph.ts`(新規)
     - 仕様参照: spec.md §5.8 コミットグラフの配置関数, §7 Requirement 9.1・9.2
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`
-  - [ ] 4.3 依存グラフの配置の純関数と `lerp` を作る
+  - [x] 4.3 依存グラフの配置の純関数と `lerp` を作る
     _Requirements: 10.1, 10.2, 10.3_
     _Boundary: depgraph_
     _Depends: 3.1_
@@ -227,3 +227,4 @@ spec.md §7 の全受け入れ基準が、いずれかのタスクから参照�
 | 2.1 グラフの型と不変条件の強制 | `8f825e5` |
 | 2.2 `graphSource` | `83aabe5` |
 | 3.1 `App` への配線 | `a7d8460` |
+| 4.1〜4.3 購読関数と配置の純関数 | `958937a` |

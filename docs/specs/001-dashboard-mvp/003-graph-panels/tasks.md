@@ -58,7 +58,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 
 ## タスク一覧
 
-- [ ] 1. Go 側のコミット履歴の契約と生成器
+- [x] 1. Go 側のコミット履歴の契約と生成器
   - [x] 1.1 `Commit` の型と不変条件の強制を作る
     _Requirements: 2.1, 2.2, 2.3, 2.6_
     _Boundary: Commit_
@@ -75,7 +75,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §5.1 `commitSource`, §6.2 内部状態, §7 Requirement 1・2.4・2.5・3
     - 検証コマンド: `go vet ./...`, `go test ./...`, `go test -race ./...`
 
-- [ ] 2. Go 側の依存グラフの契約と生成器
+- [x] 2. Go 側の依存グラフの契約と生成器
   - [x] 2.1 `GraphNode`・`GraphEdge`・`DependencyGraph` の型と不変条件の強制を作る
     _Requirements: 5.1, 5.2, 5.3, 5.4_
     _Boundary: GraphNode_
@@ -83,7 +83,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `graphnode.go`(新規), `graphnode_test.go`(新規)
     - 仕様参照: spec.md §6.3 `GraphNode`, §6.4 `GraphEdge`, §6.5 `DependencyGraph`, §7 Requirement 5.1〜5.4
     - 検証コマンド: `go vet ./...`, `go test ./...`
-  - [ ] 2.2 `graphSource` を作り `feed.Source` を構造的に満たす
+  - [x] 2.2 `graphSource` を作り `feed.Source` を構造的に満たす
     _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5, 12.2, 12.3_
     _Boundary: graphSource_
     _Depends: 2.1_
@@ -225,3 +225,4 @@ spec.md §7 の全受け入れ基準が、いずれかのタスクから参照�
 | 1.1 `Commit` の型と不変条件の強制 | `038e9c6` |
 | 1.2 `commitSource` | `d8509e7` |
 | 2.1 グラフの型と不変条件の強制 | `8f825e5` |
+| 2.2 `graphSource` | `83aabe5` |

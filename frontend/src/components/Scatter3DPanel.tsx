@@ -7,6 +7,36 @@ import { loadSnapshot, subscribeScatter } from '../lib/feed';
 /** 点群が未着のあいだの描画対象。毎回作り直さないため、モジュールの定数として持つ。 */
 const EMPTY_CLOUD: main.ScatterCloud = { seq: 0, points: [] } as main.ScatterCloud;
 
+/** ヨーの角速度（ラジアン毎秒）。1 周におよそ 26 秒かかる速さ。 */
+const YAW_RATE_RAD_PER_SEC = 0.24;
+
+/**
+ * 1 フレームとして扱う経過時間の上限（ミリ秒）。
+ *
+ * ウィンドウの最小化などで requestAnimationFrame が止まると、復帰時の
+ * 差分が数秒に達しうる。頭打ちにしないと点群がその分だけ一気に回る。
+ */
+const MAX_FRAME_MS = 100;
+
+/**
+ * 1 フレームを描く。
+ *
+ * 描画対象は canvas のバッキングストアで、投影は CSS ピクセルで行うため、
+ * devicePixelRatio ぶんの拡大は変換行列で吸収する。
+ */
+function render(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  view: { width: number; height: number },
+  _cloud: main.ScatterCloud,
+  _yaw: number,
+): void {
+  const scaleX = canvas.width / view.width;
+  const scaleY = canvas.height / view.height;
+  ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+  ctx.clearRect(0, 0, view.width, view.height);
+}
+
 /**
  * 擬似的な 3 次元の点群を Canvas 2D へ投影して描き、回転させる。
  *
@@ -83,6 +113,53 @@ export function Scatter3DPanel(): React.JSX.Element {
       });
 
     return unsubscribe;
+  }, []);
+
+  // 回転と描画のループ。
+  //
+  // ヨーを state ではなく ref に持つのは、毎フレームの再描画を React に
+  // 起こさせないため（CLAUDE.md TypeScript 規約。spec.md §8）。
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) {
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) {
+      // 画面にエラーを出さず、枠は空のまま残す（spec.md §5.5）。
+      console.error('Canvas の 2D コンテキストを取得できない。3D 散布図の描画を行わない');
+      return;
+    }
+
+    let yaw = 0;
+    let prevMs: number | null = null;
+    let handle = 0;
+
+    const frame = (nowMs: number): void => {
+      handle = window.requestAnimationFrame(frame);
+
+      // 経過時間の上限を切るのは、最小化からの復帰などでフレームが長く空いたときに
+      // ヨーが一気に進んで点群が飛ぶのを防ぐため（spec.md §7 7.3）。
+      const elapsed = prevMs === null ? 0 : Math.min(nowMs - prevMs, MAX_FRAME_MS);
+      prevMs = nowMs;
+      // 点群の更新イベントが 1 度も届かなくても回転を続ける（spec.md §7 7.1）。
+      yaw += (elapsed / 1000) * YAW_RATE_RAD_PER_SEC;
+
+      const view = viewRef.current;
+      if (view.width === 0 || view.height === 0) {
+        // 0 除算で NaN を画面へ出さない（spec.md §7 6.6）。
+        return;
+      }
+
+      render(ctx, canvas, view, cloudRef.current, yaw);
+    };
+
+    handle = window.requestAnimationFrame(frame);
+    // アンマウントでループを止める（spec.md §7 7.4）。止めないと外れた
+    // キャンバスへ描き続け、パネルの数だけ無駄なフレームが積み上がる。
+    return () => {
+      window.cancelAnimationFrame(handle);
+    };
   }, []);
 
   // 枠いっぱいに広げる。block にするのは、inline 要素の行下の余白で

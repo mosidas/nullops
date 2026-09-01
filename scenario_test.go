@@ -1,7 +1,7 @@
 package main
 
 import (
-	"math/rand/v2"
+	"math/rand"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -36,7 +36,7 @@ func (c *testClock) advance(d time.Duration) {
 }
 
 func newTestRand() *rand.Rand {
-	return rand.New(rand.NewPCG(1, 2))
+	return rand.New(rand.NewSource(12))
 }
 
 // transition は検出したフェーズの切り替わりを表す。

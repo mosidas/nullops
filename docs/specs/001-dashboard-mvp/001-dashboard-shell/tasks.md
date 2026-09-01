@@ -184,7 +184,7 @@
     - 対象ファイル: `snapshot.go`(新規), `app.go`(変更), `app_test.go`(変更)
     - 仕様参照: spec.md §5.4, §6.2
     - 検証コマンド: `go vet ./... && go test ./...` / 0 件の状態で `encoding/json` へ通した結果が `{"log":[]}` になること、連続呼び出しで `Seq` の最大値と `scenario.Current()` が変化しないことを検査する
-  - [ ] 4.4 `App.Greet` を削除する。削除の前にフロントエンドからの参照がゼロであることを確認し（タスク 1.5 で除去済み）、バインディングを再生成して生成物から `Greet` が消えることを確かめる
+  - [x] 4.4 `App.Greet` を削除する。削除の前にフロントエンドからの参照がゼロであることを確認し（タスク 1.5 で除去済み）、バインディングを再生成して生成物から `Greet` が消えることを確かめる
     _Requirements: 1.7_
     _Boundary: App_
     _Depends: 4.1, 4.3, 1.5_
@@ -296,6 +296,10 @@
 - `Level` / `Phase` に非公開の `valid() bool` がある(定義済み 4 値の `switch` 列挙)。タスク 2.5 で候補集合やフェーズ値を検査するときに再利用できる。
 - `AtMs` には spec.md §6.1 に不変条件の記載が無いため検証を入れていない(負値も 0 も受け付ける)。
 - 複数の不変条件を同時に破る入力では、引数順(Seq → Tool → Phase → Level → Text)で最初に当たった 1 件を返す。spec.md は複数違反の報告方法を規定していないため最小実装とした。
+
+- **`math/rand/v2` は使えない(タスク 4.4 で判明)**。Wails v2.13.0 の `wails build` は bindings 生成の段で `internal error: package "math/rand/v2" without types was imported from "nullops"` で落ちる。同じ生成を単独で行う `wails generate module` は成功するため、`build` 側の `packages.Load` の LoadMode の違いが原因と見られる。spec.md は乱数生成器のパッケージを規定していないため、`math/rand`(v1)へ移した(`NewPCG` → `NewSource`、`Int64N` → `Int63n`、`IntN` → `Intn`)。擬似データの見え方が起動ごとに変わればよく暗号強度は要らないため、v1 で要件を満たす。**後続の作業単位も `math/rand/v2` を import しないこと。**
+- `wails generate module` は `wails build` より速く bindings だけを再生成する。バインディングの型を確かめたいだけのときはこちらを使う。
+- `build/bin` / `frontend/dist` / `frontend/wailsjs` は `.gitignore` 済みで、`wails build` 後の `git status` はクリーンだった。Next.js 16 による `tsconfig.json` / `AGENTS.md` / `CLAUDE.md` の自動書き換えも `wails build` では起きなかった(`next dev` 固有と見られる)。
 
 ### 未検証項目(人間が確認すべきこと)
 

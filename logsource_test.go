@@ -1,7 +1,7 @@
 package main
 
 import (
-	"math/rand/v2"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +14,7 @@ func newTestLogSource(t *testing.T, capacity int) *logSource {
 
 	clk := newTestClock()
 	sc := newScenario(testMinHold, testMaxHold, newTestRand(), clk.now)
-	return newLogSource(capacity, rand.New(rand.NewPCG(3, 4)), sc)
+	return newLogSource(capacity, rand.New(rand.NewSource(34)), sc)
 }
 
 // nextLine は Next() の戻り値が長さ 1 の []LogLine であることを確かめて 1 行を取り出す。
@@ -86,7 +86,7 @@ func TestLogSourceUsesCurrentPhase(t *testing.T) {
 
 	clk := newTestClock()
 	sc := newScenario(hold, hold, newTestRand(), clk.now)
-	s := newLogSource(10, rand.New(rand.NewPCG(3, 4)), sc)
+	s := newLogSource(10, rand.New(rand.NewSource(34)), sc)
 
 	want := []Phase{PhaseBuild, PhaseTest, PhaseDeploy, PhaseScan, PhaseBuild}
 	for i, phase := range want {
@@ -102,7 +102,7 @@ func TestLogSourceNextUsesPhaseCandidates(t *testing.T) {
 
 	clk := newTestClock()
 	sc := newScenario(hold, hold, newTestRand(), clk.now)
-	s := newLogSource(10, rand.New(rand.NewPCG(5, 6)), sc)
+	s := newLogSource(10, rand.New(rand.NewSource(56)), sc)
 
 	// 4 フェーズを 1 巡し、どの行もその時点のフェーズの候補集合から来ていることを確かめる。
 	for range 4 {

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"math/rand/v2"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -135,7 +135,7 @@ func (s *logSource) Interval() time.Duration {
 	defer s.mu.Unlock()
 
 	// 上限を含む閉区間にするため、半開区間の幅へ 1 を足す。
-	return logMinInterval + time.Duration(s.rnd.Int64N(int64(logMaxInterval-logMinInterval)+1))
+	return logMinInterval + time.Duration(s.rnd.Int63n(int64(logMaxInterval-logMinInterval)+1))
 }
 
 // Next は長さ 1 の []LogLine を返す。
@@ -151,7 +151,7 @@ func (s *logSource) Next() any {
 	defer s.mu.Unlock()
 
 	candidates := logCandidates[phase]
-	c := candidates[s.rnd.IntN(len(candidates))]
+	c := candidates[s.rnd.Intn(len(candidates))]
 	s.seq++
 
 	line, err := newLogLine(s.seq, time.Now().UnixMilli(), c.tool, phase, c.level, c.text)

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"math/rand/v2"
+	"math/rand"
 	"time"
 
 	"nullops/feed"
@@ -69,10 +69,14 @@ func (a *App) startup(ctx context.Context) {
 
 // newSeededRand は生成器ごとに独立した *rand.Rand を作る。
 //
-// 種は math/rand/v2 のグローバル生成器（自動で種が入る）から取る。
+// 種は math/rand のグローバル生成器（Go 1.20 以降は自動で種が入る）から取る。
 // 画面に出る擬似データの見え方が起動ごとに変わればよく、暗号強度は要らない。
+//
+// math/rand/v2 を使わないのは、Wails v2.13.0 の bindings 生成が
+// `internal error: package "math/rand/v2" without types was imported` で
+// 失敗し、wails build が通らないため（wails generate module では再現しない）。
 func newSeededRand() *rand.Rand {
-	return rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	return rand.New(rand.NewSource(rand.Int63()))
 }
 
 // domReady is called after front-end resources have been loaded
@@ -116,9 +120,4 @@ func (a *App) Snapshot() DashboardSnapshot {
 		return DashboardSnapshot{Log: []LogLine{}}
 	}
 	return DashboardSnapshot{Log: a.logs.Snapshot()}
-}
-
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return "Hello " + name + ", It's show time!"
 }

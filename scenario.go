@@ -1,7 +1,7 @@
 package main
 
 import (
-	"math/rand/v2"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -83,7 +83,7 @@ func (s *scenario) advance() {
 // randomHold は [minHold, maxHold] の一様乱数を返す。呼び出し側で mu を保持すること。
 func (s *scenario) randomHold() time.Duration {
 	// 上限を含む閉区間にするため、半開区間の幅へ 1 を足す。
-	return s.minHold + time.Duration(s.rnd.Int64N(int64(s.maxHold-s.minHold)+1))
+	return s.minHold + time.Duration(s.rnd.Int63n(int64(s.maxHold-s.minHold)+1))
 }
 
 // nextPhase は巡回順の次のフェーズを返す。

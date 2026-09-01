@@ -80,7 +80,7 @@ description: unit 分解部品(サブ)。大きな依頼を作業単位(unit)へ
 - 未確定の項目が「問いを述べられない」ものに限られているか(問いを述べられるものが未確定に残っていないか)。
 - スコープ外の各項目に理由があるか。
 
-`REJECTED` なら最大 2 回自己修復し、`QUESTIONS` は `AskUserQuestion` で解消する。
+`REJECTED` なら最大 2 回自己修復し、`QUESTIONS` は `AskUserQuestion` で解消する。上限に達してなお `REJECTED` のときは、`../dev-core/templates/doc-gate-prompt.md` 冒頭の「自己修復の上限到達の扱い」に従って停止する(上限到達を合格と読まない)。
 
 ### Step 7: 保存とコミット
 

@@ -281,6 +281,10 @@ def check_markdown(
             continue
         for line_no, marker in lib.find_markers(p):
             report.warning(f"{name}:{line_no} に残存マーカー {marker}")
+        for line_no, tag in lib.find_tool_markup(p):
+            report.error(
+                f"{name}:{line_no} にツールのマークアップ混入 {tag}(行全体が閉じタグ 1 個)"
+            )
     if spec_path.is_file():
         for line_no, word in lib.find_ambiguous(spec_path):
             report.info(f"{spec_path.name}:{line_no} に曖昧語「{word}」(定量化を検討)")

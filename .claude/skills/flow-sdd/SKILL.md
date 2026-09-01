@@ -89,13 +89,13 @@ unit: initialized → spec-generated →(gate: spec)→ spec-approved
 
 ### 5.0. 工程の委譲
 
-**自走する工程はサブエージェントへ委譲し、ユーザーとの対話を伴う工程はこのセッションが自分で実行する**。委譲の目的は、工程の作業内容(調査の本文・タスクごとの実装レポート・検証の出力)をこのセッションの文脈から外し、判断に使う情報だけを残すことである。
+**自走し、かつ作業内容がこのセッションの文脈を圧迫する工程をサブエージェントへ委譲する**。ユーザーとの対話を伴う工程と、1 パスで終わって文脈が積もらない工程は、このセッションが自分で実行する。委譲の目的は、工程の作業内容(調査の本文・タスクごとの実装レポート・検証の出力)をこのセッションの文脈から外し、判断に使う情報だけを残すことである。
 
 | 工程 | 実行 | 理由 |
 | ---- | ---- | ---- |
 | Step R: roadmap の作成 | `dev-roadmap-planner` へ委譲(提示と承認はこのセッション) | 分解の材料(企画書・既存コードベース)の読み込みを隔離する |
 | Step 1: 仕様フェーズ | このセッションが実行 | dev-spec の Step 2(質問駆動)と Step 3(契約の壁打ち)がユーザーとの往復で成り立つため、委譲できない |
-| Step 2: タスク分解フェーズ | `dev-decompose-runner` へ委譲 | 通常の経路では対話が発生しない |
+| Step 2: タスク分解フェーズ | このセッションが実行 | 1 パスで終わり、生成物と機械検査の出力が圧縮に至らない。内蔵ゲートの `QUESTIONS` にその場で応じられる(D-030) |
 | Step 3: 実装フェーズ | `dev-implement-runner` へ委譲 | 自走する工程であり、文脈の消費が最も大きい |
 
 - **起動プロンプトは最小限にする**。渡すのは workdir・作業単位名・実行する SKILL.md のパスだけとする。工程の手順・生成規則・判定基準はファイルにあり、プロンプトへ転記しない(指示とデータの分離は `../dev-core/references/orchestration-patterns.md`)。仕様・タスクの内容も転記せず、委譲先が workdir から読む。
@@ -135,11 +135,11 @@ unit: initialized → spec-generated →(gate: spec)→ spec-approved
 
 ### Step 2: タスク分解フェーズ
 
-1. `dev-decompose-runner` を 1 体起動し、`../dev-decompose/SKILL.md` の手順で `tasks.md` を生成させる。渡すのは workdir・作業単位名・実行する SKILL.md のパスだけとする(5.0)。
-2. 返却の `STATUS` で分岐する。
-   - `TASKS_READY`: `<engine> set-state tasks-generated` → tasks.md を提示してユーザーの明示承認 → `<engine> approve tasks`。
-   - `NEEDS_DECISION`: `OPEN_QUESTIONS` をユーザーに諮り、回答を添えて再委譲する。
-   - `SPEC_DEFECT`: `<engine> set-state spec-generated` で差し戻し、仕様フェーズからやり直す。
+1. `../dev-decompose/SKILL.md` の手順を workdir 上書きで実行する(File Structure Plan → タスクへの分解 → 内蔵ゲート → 機械検査 → 保存・コミット)。内蔵ゲートが `QUESTIONS` を挙げたらユーザーに諮り、回答を得てから続ける。
+2. `<engine> set-state tasks-generated`。
+3. tasks.md を提示してユーザーの明示承認を待つ。修正要望があれば同状態のまま反映して再提示する。
+4. 承認を得たら `<engine> approve tasks`。
+5. 仕様の不備で分解できない場合は、2. 以降へ進まず `<engine> set-state spec-generated` で差し戻し、仕様フェーズからやり直す。
 
 ### Step 3: 実装フェーズ
 

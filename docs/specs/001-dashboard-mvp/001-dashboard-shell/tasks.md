@@ -127,7 +127,7 @@
     - 検証コマンド: `go vet ./... && go test -race ./...` / `capacity + 1` 行目の生成後に保持件数が `capacity`・`Seq` が昇順連続・返り値への変更が内部へ波及しないことを検査する
 
 - [ ] 3. (P) 生成器の駆動機構（Go / feed パッケージ）
-  - [ ] 3.1 `feed` パッケージを作り、`Source` と `Emitter` を利用側パッケージとして定義する。テスト用の擬似 `Emitter`（送信を記録する）と擬似 `Source` を用意し、Wails ランタイムを起動せずに `feed` のテストが実行できることを示す
+  - [x] 3.1 `feed` パッケージを作り、`Source` と `Emitter` を利用側パッケージとして定義する。テスト用の擬似 `Emitter`（送信を記録する）と擬似 `Source` を用意し、Wails ランタイムを起動せずに `feed` のテストが実行できることを示す
     _Requirements: 10.1_
     _Boundary: Feed_
     - 対象ファイル: `feed/feed.go`(新規), `feed/runner_test.go`(新規)

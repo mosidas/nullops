@@ -12,6 +12,9 @@ frontend/package.json.md5
 .idea
 .vscode
 
+# dev-skills のエンジン(state.py 等)を実行すると生成される
+__pycache__/
+
 # System enviroment variables
 env
 

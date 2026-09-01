@@ -1,0 +1,361 @@
+# dashboard-shell — 実装タスク
+
+> 仕様の詳細は同じディレクトリの仕様文書 spec.md を参照する。
+> このファイルには仕様を転記しない。
+
+## File Structure Plan
+
+| ファイルパス | 区分 | 責務 |
+| ------------ | ---- | ---- |
+| `logline.go` | 新規 | `Level` / `Phase` / `LogLine` の型と、不変条件を強制する非公開の完全コンストラクタ |
+| `logline_test.go` | 新規 | 完全コンストラクタの正常系と不変条件違反ごとの error 経路 |
+| `scenario.go` | 新規 | 擬似的な作業フェーズの巡回（読み取り時に遅延で進める。ゴルーチンを持たない） |
+| `scenario_test.go` | 新規 | 注入した `now` によるフェーズ遷移・多段遷移・保持時間の引き直し・並行安全性 |
+| `logsource.go` | 新規 | ログフィードの生成器（`Source` の実装）とリングバッファ |
+| `logsource_test.go` | 新規 | Seq の採番・間隔の範囲・フェーズ別の候補集合・保持上限・Snapshot のコピー |
+| `snapshot.go` | 新規 | `DashboardSnapshot`（バインディングの戻り値型。後続作業単位の拡張点） |
+| `emitter.go` | 新規 | `feed.Emitter` の Wails 実装（`runtime.EventsEmit` への委譲） |
+| `app.go` | 変更 | `App` のライフサイクル（ctx / cancel / done）・`Snapshot`・`Greet` の削除 |
+| `app_test.go` | 新規 | `startup` の送出経路、`shutdown` の停止保証、`Snapshot` の副作用なし・空配列 |
+| `main.go` | 変更 | `OnShutdown` の結線とウィンドウ寸法（起動サイズ・最小サイズ） |
+| `feed/feed.go` | 新規 | `Source` / `Emitter` インターフェース（利用側パッケージでの定義） |
+| `feed/runner.go` | 新規 | `Runner`・`NewRunner`・`Run`（Source ごとのゴルーチン駆動と停止保証） |
+| `feed/runner_test.go` | 新規 | 擬似 `Emitter` / `Source` による駆動・事前条件違反・キャンセル時の停止 |
+| `frontend/src/app/globals.css` | 変更 | デザイントークンの正本（`@theme`）。ダーク 1 系統・等幅を既定にする |
+| `frontend/src/app/layout.tsx` | 変更 | `metadata` の置き換えと `next/font/google`（Geist / Geist_Mono）の除去 |
+| `frontend/src/app/page.tsx` | 変更 | デモ UI の除去と 6 枠の配置（`Log Stream` 以外はプレースホルダ） |
+| `frontend/src/components/Panel.tsx` | 新規 | 見出しと内側スクロールを持つ共通の枠 |
+| `frontend/src/components/DashboardGrid.tsx` | 新規 | 3 列 × 2 行のグリッドと子要素数の検査 |
+| `frontend/src/components/LogStreamPanel.tsx` | 新規 | ログ行の購読・併合・表示上限・追従スクロール・重大度の配色 |
+| `frontend/src/lib/feed.ts` | 新規 | `subscribeLog` / `loadSnapshot`（Wails ランタイムとの境界） |
+| `docs/specs/001-dashboard-mvp/001-dashboard-shell/tasks.md` | 変更 | 目視検証タスクの観察結果を `## Implementation Notes` へ記録する |
+
+補足（計画の根拠と、意図的に置かなかったもの）:
+
+- **削除するファイルは無い**。廃止するのは `App.Greet` メソッドと `page.tsx` のデモ UI であり、いずれもファイル単位の削除ではない。`Greet` は参照元（`page.tsx`）を先に置き換えるタスク 1.5 を先行させ、使用ゼロを確認してからタスク 4.4 で削除する。`frontend/public` の画像は spec.md §2 スコープ外のため残す。
+- **ドキュメント反映のタスクを置かない**。用語集への追記を行わないことは spec.md §8 が定めており、`README.md`「画面」表と実画面の一致確認は roadmap.md §1.1 が作業単位 `metrics-panels` の完了条件としている。本作業単位に反映すべき既存ドキュメントが無いため、独立タスクを立てない。
+- **フロントエンドにテストタスクを置かない**。テストランナーの導入は spec.md §2 スコープ外であり、検証は `npm run lint` と `wails dev` での目視、および決定論的な静的検査（色の直値の grep 等）で行う。ロジックを Go 側に集約するという spec.md §3 前提 1 に対応する。
+- **メインタスク 1・2・3 に `(P)` を付ける**。触るファイルが重ならない（フロントエンド / `main` パッケージのログ生成 / `feed` パッケージ）ためである。`logSource` は `feed.Source` を構造的に満たすだけで `feed` を import しないため、2 と 3 の間に依存が無い。
+- **2・3・4 を分けた理由**（垂直スライス優先の補足）: ログの垂直パスは「型 → 駆動 → 結線 → 画面」だが、これを 1 タスクにするとテスト込みで数百行を大きく超える。分割の境界は spec.md §5 の契約の境界（`feed` の 3 インターフェース / `main` の生成器 / バインディング）に一致させ、各段が単独で `go test ./...` を緑に保てるようにした。
+- **フロントエンドは Wails の生成物に依存する**。`frontend/wailsjs/` はリポジトリ非管理の生成物であり、`npm run lint`（Biome）は型検査を行わない。そのため生成物の型に依存するタスク 5.1 は、バインディングを生成する `wails build` を含むタスク 4.4 に依存させ、生成物の存在確認を検証に含める。
+
+## タスク一覧
+
+- [x] 1. (P) フロントエンドの土台（デザイントークンと 6 枠レイアウト）
+  - [x] 1.1 `@theme` に spec.md §6.6 のトークンを定義し、配色をダーク 1 系統・既定の書体を等幅にする。`prefers-color-scheme` の分岐、`body { font-family: Arial, ... }`、および `--font-geist-*` を参照する既存の `@theme inline` を除去・置換する（タスク 1.2 で Geist の定義が消えるため、残すと `--font-mono` が解決できなくなる）
+    _Requirements: 9.1, 9.5, 9.6, 9.7, 10.4_
+    _Boundary: DesignTokens_
+    - 対象ファイル: `frontend/src/app/globals.css`(変更)
+    - 仕様参照: spec.md §6.6
+    - 検証コマンド: `cd frontend && npm ci && npm run lint` / コントラスト比は `python3 -c` で WCAG 2.1 の相対輝度式から `--color-text` と `--color-surface-1` の比を算出し、4.5:1 以上であることと算出値をコミット本文に記す / `grep -nEi "prefers-color-scheme|geist|Arial" frontend/src/app/globals.css` が 0 件
+  - [x] 1.2 `metadata.title` を `nullops`、`metadata.description` を nullops を説明する文字列へ置き換え、`next/font/google` の `Geist` と `Geist_Mono` の import・`className` への適用をいずれも除去する
+    _Requirements: 1.5, 1.6, 9.5_
+    _Boundary: AppShell_
+    _Depends: 1.1_
+    - 対象ファイル: `frontend/src/app/layout.tsx`(変更)
+    - 仕様参照: spec.md §5.7 文書タイトル, §8「`next/font/google` を使わない」
+    - 検証コマンド: `cd frontend && npm run lint` / `grep -n "next/font" frontend/src/app/layout.tsx` が 0 件
+  - [x] 1.3 `Panel` を実装する。見出しと本文領域を持ち、本文が枠の高さを超えたときは枠の内側だけが縦スクロールする。色はトークン経由でのみ参照する。この段では枠を超える中身が無いため検証は静的検査に留め、スクロールの目視はタスク 5.4 で行う
+    _Requirements: 8.5, 9.2_
+    _Boundary: Panel_
+    _Depends: 1.1_
+    - 対象ファイル: `frontend/src/components/Panel.tsx`(新規)
+    - 仕様参照: spec.md §5.7 `Panel`
+    - 検証コマンド: `cd frontend && npm run lint` / `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components` が 0 件
+  - [x] 1.4 `DashboardGrid` を実装する。3 列 × 2 行で 6 枠を配置し、コンテナの幅・高さに追随させ、ページ全体に縦横のスクロールバーを出さない。この段では画面に出ないため検証は静的検査に留め、目視はタスク 1.5 で行う
+    _Requirements: 1.1_
+    _Boundary: DashboardGrid_
+    _Depends: 1.1_
+    - 対象ファイル: `frontend/src/components/DashboardGrid.tsx`(新規)
+    - 仕様参照: spec.md §5.7 `DashboardGrid`
+    - 検証コマンド: `cd frontend && npm run lint` / `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components` が 0 件
+  - [x] 1.5 `page.tsx` のデモ UI（ロゴ・名前入力・Greet ボタンと `Greet` の呼び出し）を除去し、`DashboardGrid` に spec.md §5.7 の表が定める 6 つの見出しをその位置で並べる。`Log Stream` を含む 6 枠すべてを、この段では中身の位置に `pending` を表示するプレースホルダとする（`Log Stream` の中身はタスク 5.2 が差し替える）
+    _Requirements: 1.1, 1.2, 1.3, 1.7, 8.3, 8.4_
+    _Boundary: AppShell_
+    _Depends: 1.3, 1.4_
+    - 対象ファイル: `frontend/src/app/page.tsx`(変更)
+    - 仕様参照: spec.md §5.7 の 6 枠の表, §7 Requirement 1
+    - 検証コマンド: `cd frontend && npm run lint` / `grep -rn "Greet" frontend/src` が 0 件（タスク 4.4 が `App.Greet` を削除する前提となる使用ゼロの確認）/ `wails dev` で 6 枠が 3 列 × 2 行に並び、spec.md §5.7 の表の 6 つの見出し文字列が表が定める位置（1 行目 左中右 = `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左中右 = `Dependency Graph` / `Utilization` / `Scatter 3D`）に出ていることを目視で照合する / ウィンドウを最大化・縮小しても 6 枠が表示領域に追随しページ全体にスクロールバーが出ないことを目視する（最小サイズの制限はタスク 4.5 で確認する）
+  - [x] 1.6 `DashboardGrid` の子要素数が 6 でない分岐を実装する。`console.error` を 1 回出力し、受け取った子要素をすべて描画する（画面を空にしない）
+    _Requirements: 1.4_
+    _Boundary: DashboardGrid_
+    _Depends: 1.5_
+    - 対象ファイル: `frontend/src/components/DashboardGrid.tsx`(変更)
+    - 仕様参照: spec.md §5.7 `DashboardGrid` のエラー
+    - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で `page.tsx` の枠を一時的に 5 個へ減らし、DevTools のコンソールに `console.error` が 1 回だけ出て 5 枠が描画されることを確認したうえで 6 個へ戻す（6 個のときはコンソールに出力が無いことも確認する）
+
+- [x] 2. (P) ログ行の型・フェーズ巡回・ログ生成器（Go / main パッケージ）
+  - [x] 2.1 `Level` / `Phase` / `LogLine` と、不変条件を満たす値だけを作る非公開の完全コンストラクタを実装する（正常系）。このタスクでリポジトリ最初の Go テストを成立させる
+    _Requirements: 4.2, 4.3, 10.2, 10.3_
+    _Boundary: LogLine_
+    - 対象ファイル: `logline.go`(新規), `logline_test.go`(新規)
+    - 仕様参照: spec.md §6.1
+    - 検証コマンド: `go vet ./... && go test ./...`
+  - [x] 2.2 完全コンストラクタの異常系を実装する。空の `Text` / 改行(U+000A・U+000D)を含む `Text` / 空の `Tool` / 未定義の `Level` / 未定義の `Phase` の各違反に個別のテストケースを割り当て、いずれも値を返さず error を返す
+    _Requirements: 4.2, 4.3, 4.4_
+    _Boundary: LogLine_
+    _Depends: 2.1_
+    - 対象ファイル: `logline.go`(変更), `logline_test.go`(変更)
+    - 仕様参照: spec.md §6.1 不変条件・完全コンストラクタ
+    - 検証コマンド: `go vet ./... && go test ./...`
+  - [x] 2.3 `scenario` を実装する。生成時のフェーズを `build` とし、最初の保持時間を `[minHold, maxHold]` の一様乱数で決める。`Current()` の呼び出し時に経過分だけ `build` → `test` → `deploy` → `scan` → `build` の順で進め、切り替えのたびに次の保持時間を同じ範囲の一様乱数で引き直す。専用のゴルーチンを起動せず、mutex で並行安全にする
+    _Requirements: 5.1, 5.2, 5.3, 5.7_
+    _Boundary: Scenario_
+    - 対象ファイル: `scenario.go`(新規), `scenario_test.go`(新規)
+    - 仕様参照: spec.md §6.4, §8「フェーズは読み取り時に遅延で進める」
+    - 検証コマンド: `go vet ./... && go test -race ./...` / 注入した `now` で遷移を検査し、保持時間の引き直しは決定的な `*rand.Rand`（固定 seed）で 2 回目以降の保持時間が範囲内かつ最初と異なりうることを検査する / ゴルーチンを持たないことは `runtime.NumGoroutine()` が `newScenario` と `Current()` の前後で増えないテストで検査する
+  - [x] 2.4 `Current()` の呼び出し時点で 2 つ以上のフェーズの保持時間が経過している場合に、経過した数だけ進める分岐を実装する
+    _Requirements: 5.6_
+    _Boundary: Scenario_
+    _Depends: 2.3_
+    - 対象ファイル: `scenario.go`(変更), `scenario_test.go`(変更)
+    - 仕様参照: spec.md §6.4 `Current` の事後条件
+    - 検証コマンド: `go vet ./... && go test ./...`
+  - [x] 2.5 `logSource` を実装する。`EventName()` は固定値、`Interval()` は 80〜400 ms の一様乱数、`Next()` は長さ 1 の `[]LogLine` を返す。`Seq` を 1 から 1 ずつ自身で採番し、`Phase` にその時点の `scenario.Current()` を設定し、フェーズごとに異なる英語の `Tool` / `Text` 候補集合から行を組み立てる。`*rand.Rand` は `scenario` と共有せず、mutex で並行安全にする
+    _Requirements: 2.2, 4.1, 4.5, 5.4, 5.5_
+    _Boundary: LogSource_
+    _Depends: 2.1, 2.3_
+    - 対象ファイル: `logsource.go`(新規), `logsource_test.go`(新規)
+    - 仕様参照: spec.md §6.3, §5.1
+    - 検証コマンド: `go vet ./... && go test -race ./...` / 候補集合の全要素が spec.md §6.1 の不変条件（1 文字以上・改行なし・ASCII の英語）を満たすことをテストで走査し、フェーズごとに候補集合が異なることを検査する
+  - [x] 2.6 `logSource` のリングバッファを実装する。保持上限は `newLogSource` の `capacity` 引数で受け（500 を渡すのはタスク 4.1）、上限に達した状態で次の行を生成したときは最古の 1 行を捨てる。`Snapshot()` は保持している全行を古い順に、内部と別の配列で返す
+    _Requirements: 2.3, 2.4_
+    _Boundary: LogSource_
+    _Depends: 2.5_
+    - 対象ファイル: `logsource.go`(変更), `logsource_test.go`(変更)
+    - 仕様参照: spec.md §6.3 不変条件・`Snapshot` の事後条件
+    - 検証コマンド: `go vet ./... && go test -race ./...` / `capacity + 1` 行目の生成後に保持件数が `capacity`・`Seq` が昇順連続・返り値への変更が内部へ波及しないことを検査する
+
+- [x] 3. (P) 生成器の駆動機構（Go / feed パッケージ）
+  - [x] 3.1 `feed` パッケージを作り、`Source` と `Emitter` を利用側パッケージとして定義する。テスト用の擬似 `Emitter`（送信を記録する）と擬似 `Source` を用意し、Wails ランタイムを起動せずに `feed` のテストが実行できることを示す
+    _Requirements: 10.1_
+    _Boundary: Feed_
+    - 対象ファイル: `feed/feed.go`(新規), `feed/runner_test.go`(新規)
+    - 仕様参照: spec.md §5.1, §5.2, §8「`Emitter` を境界に置く理由」
+    - 検証コマンド: `go vet ./... && go test ./...` / `grep -rn "wailsapp/wails" feed/` が 0 件
+  - [x] 3.2 `NewRunner` の事前条件検査を実装する。nil の `Emitter` / 0 個の `Source` / 空文字の `EventName()` を返す `Source` / `EventName()` が重複する `Source` の 4 分岐それぞれに個別のテストケースを割り当て、いずれも nil の `Runner` と error を返す（`panic` しない）。事前条件を満たすときは非 nil と nil error を返す
+    _Requirements: 6.3_
+    _Boundary: Runner_
+    _Depends: 3.1_
+    - 対象ファイル: `feed/runner.go`(新規), `feed/runner_test.go`(変更)
+    - 仕様参照: spec.md §5.3 `NewRunner`
+    - 検証コマンド: `go vet ./... && go test ./...`
+  - [x] 3.3 `Run` を実装する。`Source` ごとに独立したゴルーチンを割り当て、各自の `Interval()` だけ待ってから `Next()` を呼び、戻り値を `EventName()` のイベント名で `Emitter.Emit` へ渡す。ある `Source` の間隔が他の送信周期に影響しないことを検査する
+    _Requirements: 6.1, 6.2_
+    _Boundary: Runner_
+    _Depends: 3.2_
+    - 対象ファイル: `feed/runner.go`(変更), `feed/runner_test.go`(変更)
+    - 仕様参照: spec.md §5.3 `Run`, §7 Requirement 6
+    - 検証コマンド: `go vet ./... && go test -race ./...` / 短い間隔（数ミリ秒）を返す擬似 `Source` を 2 個登録し、擬似 `Emitter` の記録がイベント名ごとに独立して増えることを検査する
+  - [x] 3.4 `Source.Interval()` が事後条件に反して 1 ミリ秒未満を返した場合に、待ち時間を 1 ミリ秒として扱う分岐を実装する（ビジーループに陥らない）
+    _Requirements: 6.4_
+    _Boundary: Runner_
+    _Depends: 3.3_
+    - 対象ファイル: `feed/runner.go`(変更), `feed/runner_test.go`(変更)
+    - 仕様参照: spec.md §7 Requirement 6.4
+    - 検証コマンド: `go vet ./... && go test ./...` / 0 と負値を返す擬似 `Source` で、一定時間の送信回数が 1 ミリ秒間隔の上限を超えないことを検査する
+  - [x] 3.5 キャンセル時の停止保証を実装する。`ctx.Done()` が閉じた後に `Emitter.Emit` を新たに開始せず、起動した全ゴルーチンの終了を待ってから `Run` が戻る（戻った時点でこの `Runner` のゴルーチンは 0 個）
+    _Requirements: 7.4, 7.5_
+    _Boundary: Runner_
+    _Depends: 3.3_
+    - 対象ファイル: `feed/runner.go`(変更), `feed/runner_test.go`(変更)
+    - 仕様参照: spec.md §5.3 不変条件・キャンセル後の送信
+    - 検証コマンド: `go vet ./... && go test -race ./...` / `Run` の復帰後に擬似 `Emitter` の記録件数が増えないこと、`runtime.NumGoroutine()` が `Run` の呼び出し前の水準へ戻ることを検査する
+
+- [x] 4. アプリへの結線（ライフサイクル・スナップショット・イベント送信）
+  - [x] 4.1 `feed.Emitter` の Wails 実装（`runtime.EventsEmit` へ委譲）を追加し、`App` を spec.md §6.5 の形（ctx / cancel / done）へ改める。`startup` は `context.Background()` から派生させたキャンセル可能な context を生成し、`scenario`(minHold 15 秒・maxHold 45 秒)と `logSource`(capacity 500・専用の `*rand.Rand`)を組み立て、`logSource` を登録した `Runner` をその context で開始して `nullops:log` イベントに `LogLine` の配列を送出する
+    _Requirements: 2.1, 5.3, 7.1, 7.2_
+    _Boundary: App_
+    _Depends: 2.6, 3.3_
+    - 対象ファイル: `emitter.go`(新規), `app.go`(変更), `app_test.go`(新規)
+    - 仕様参照: spec.md §6.5, §5.2, §5.5, §6.4 minHold / maxHold
+    - 検証コマンド: `go vet ./... && go test -race ./...` / Wails ランタイムを起動せずに検査できるよう `Emitter` を差し替えられる接合点を設け、擬似 `Emitter` に `nullops:log` のイベント名で `[]LogLine`（長さ 1）が届くことをテストで検査する
+  - [x] 4.2 `shutdown` を実装する。自前の context をキャンセルし、`Run` の復帰を最大 1 秒待って戻る。1 秒以内に復帰する分岐と、復帰しないため待機を打ち切る分岐の両方に個別のテストケースを割り当てる
+    _Requirements: 7.3, 7.6_
+    _Boundary: App_
+    _Depends: 4.1_
+    - 対象ファイル: `app.go`(変更), `app_test.go`(変更)
+    - 仕様参照: spec.md §6.5 `shutdown` の事後条件
+    - 検証コマンド: `go vet ./... && go test -race ./...` / 復帰しない擬似 `Runner` で `shutdown` が 1 秒強で戻ること（無期限に待たないこと）を検査する
+  - [x] 4.3 `DashboardSnapshot` と `App.Snapshot` を実装する。呼び出し時点で `logSource` が保持する全行を古い順に含め、0 件でも `null` にならない空配列を返し、呼び出しによって `logSource` と `scenario` の状態を変化させない
+    _Requirements: 3.2, 3.3, 3.4_
+    _Boundary: App_
+    _Depends: 4.1_
+    - 対象ファイル: `snapshot.go`(新規), `app.go`(変更), `app_test.go`(変更)
+    - 仕様参照: spec.md §5.4, §6.2
+    - 検証コマンド: `go vet ./... && go test ./...` / 0 件の状態で `encoding/json` へ通した結果が `{"log":[]}` になること、連続呼び出しで `Seq` の最大値と `scenario.Current()` が変化しないことを検査する
+  - [x] 4.4 `App.Greet` を削除する。削除の前にフロントエンドからの参照がゼロであることを確認し（タスク 1.5 で除去済み）、バインディングを再生成して生成物から `Greet` が消えることを確かめる
+    _Requirements: 1.7_
+    _Boundary: App_
+    _Depends: 4.1, 4.3, 1.5_
+    - 対象ファイル: `app.go`(変更)
+    - 仕様参照: spec.md §5.4「削除する既存 API」
+    - 検証コマンド: `grep -rn "Greet" frontend/src` が 0 件であることを確認してから削除し、`go vet ./... && go test ./...` / `wails build` 後に `grep -rn "Greet" frontend/wailsjs` が 0 件
+  - [x] 4.5 `main.go` に `OnShutdown: app.shutdown` を結線し、ウィンドウの起動サイズを 1440 × 900、`MinWidth` を 1100、`MinHeight` を 720 に設定する
+    _Requirements: 8.1, 8.2_
+    _Boundary: App_
+    _Depends: 4.2_
+    - 対象ファイル: `main.go`(変更)
+    - 仕様参照: spec.md §6.5「`main.go` の変更」, §9 `pkg/options/options.go:41-42`
+    - 検証コマンド: `go vet ./... && go test ./...` / `wails dev` を起動し、DevTools のコンソールで `console.log(window.outerWidth, window.outerHeight)` が 1440 × 900 を示すことを確認する / ウィンドウを縮めても同じ値が 1100 × 720 を下回らないことを確認する
+
+- [x] 5. ログストリームパネル（購読・併合・描画）
+  - [x] 5.1 `subscribeLog` と `loadSnapshot` を実装する。`subscribeLog` は `EventsOn` が返す解除関数をそのまま返し、`EventsOff` を使わない（そのハンドラだけが解除される）。型は `wailsjs/go/models` の `main.LogLine` / `main.DashboardSnapshot` を使う（この生成物はタスク 4.4 の `wails build` で作られる）
+    _Requirements: 2.8_
+    _Boundary: FeedClient_
+    _Depends: 4.3, 4.4_
+    - 対象ファイル: `frontend/src/lib/feed.ts`(新規)
+    - 仕様参照: spec.md §5.6, §5.5「購読の解除には `EventsOn` の戻り値を使う」
+    - 検証コマンド: `cd frontend && npm run lint` / `grep -rn "EventsOff" frontend/src` が 0 件 / `grep -n "LogLine\|DashboardSnapshot" frontend/wailsjs/go/models.ts` が両方とも 1 件以上（バインディング生成物に型が出ていることの確認）
+  - [x] 5.2 `LogStreamPanel` を実装し、`page.tsx` の `Log Stream` 枠のプレースホルダを差し替える。マウント時に `nullops:log` の購読を開始した後に `Snapshot()` を 1 回呼び、スナップショットの行と購読開始後に受信済みの行を `Seq` の昇順で併合して同一 `Seq` を 1 行だけ残す。アンマウント時は 5.1 が返した解除関数を呼ぶ
+    _Requirements: 2.8, 3.1, 3.5_
+    _Boundary: LogStreamPanel_
+    _Depends: 5.1, 1.5_
+    - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(新規), `frontend/src/app/page.tsx`(変更)
+    - 仕様参照: spec.md §7 Requirement 3, §5.6
+    - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で起動直後に行が表示され、`Seq` の重複・欠落が無いことを DevTools で確認する
+  - [x] 5.3 受信した行を表示の末尾へ追加し、表示行数を最新 300 行に制限する。再描画のたびに新しい関数・オブジェクトを作らない（`CLAUDE.md` TypeScript 規約）
+    _Requirements: 2.5, 2.6_
+    _Boundary: LogStreamPanel_
+    _Depends: 5.2_
+    - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(変更)
+    - 仕様参照: spec.md §7 Requirement 2.5, 2.6
+    - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で 2 分以上流し、DOM の行要素数が 300 を超えないことを DevTools で確認する
+  - [x] 5.4 追従スクロールを実装する。スクロール位置が表示領域の下端から 16 ピクセル以内にある間は行の追加に合わせて下端に保ち、それより上へスクロールしている間は追従しない（両分岐を目視で確認する）。枠の高さを超えた内容はその枠の内側だけを縦にスクロールさせる
+    _Requirements: 2.7, 8.5_
+    _Boundary: LogStreamPanel_
+    _Depends: 5.3_
+    - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(変更)
+    - 仕様参照: spec.md §7 Requirement 2.7, 8.5
+    - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で下端付近では追従し、上方向へスクロールすると位置が保たれること、ページ全体にスクロールバーが出ないことを目視する
+  - [x] 5.5 重大度と書体の表示を実装する。`LogLine.Level` の 4 値に `--color-level-info` / `-warn` / `-error` / `-debug` の異なる色を割り当て、本文に `--font-mono` を適用する。色の直値を書かない
+    _Requirements: 9.2, 9.3, 9.4_
+    _Boundary: LogStreamPanel_
+    _Depends: 5.3_
+    - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(変更)
+    - 仕様参照: spec.md §6.6, §7 Requirement 9
+    - 検証コマンド: `cd frontend && npm run lint` / `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components frontend/src/lib` が 0 件 / `wails dev` で 4 値が別々の色で出ること、タイムスタンプ列と本文列の左端が揃うこと（spec.md §3 前提 4）を目視する
+  - [x] 5.6 `Snapshot()` の呼び出しが失敗した場合の分岐を実装する。例外を握って `console.error` を出力し、0 行の状態で開始する（画面にエラーを表示しない）
+    _Requirements: 3.6_
+    _Boundary: LogStreamPanel_
+    _Depends: 5.2_
+    - 対象ファイル: `frontend/src/components/LogStreamPanel.tsx`(変更)
+    - 仕様参照: spec.md §5.6 エラー, §8「画面にエラーを出さない」
+    - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で `loadSnapshot` を一時的に reject させ、画面が 0 行で開始し以後の差分で埋まること・コンソールにのみ出力されることを確認したうえで元に戻す
+
+- [x] 6. 通し検証（受け入れ確認）
+  - [x] 6.1 `wails dev` を 30 秒間観察し、ログストリームへ 60 行以上が流入して停止しないことを確認する。あわせて spec.md §3 の前提 2（1440 × 900 で 6 枠が読める）と、ウィンドウを閉じたときにプロセスが残留しないこと（roadmap.md §1.1 の完了条件）を確認する。起動時の地色（`main.go` の `BackgroundColour` はテンプレート由来の直値であり、spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため本作業単位では変更しない）が `--color-surface-0` とずれて見える場合は、後続作業単位への申し送りとして観察結果に記録する。観察結果を `## Implementation Notes` へ記録する
+    _Requirements: 2.9_
+    _Boundary: Verification_
+    _Depends: 1.2, 1.6, 2.2, 2.4, 2.6, 3.4, 3.5, 4.4, 4.5, 5.4, 5.5, 5.6_
+    - 対象ファイル: `docs/specs/001-dashboard-mvp/001-dashboard-shell/tasks.md`(変更)
+    - 仕様参照: spec.md §7 Requirement 2.9, §3 前提 2
+    - 検証コマンド: `wails dev` を起動し、DevTools のコンソールで `let n=0; const off=window.runtime.EventsOn('nullops:log', b => { n += b.length }); setTimeout(() => { console.log(n); off() }, 30000)` を実行して 30 秒後の合計が 60 以上であることを確認する / ウィンドウを閉じた後に `pgrep -fl "build/bin/nullops"` が 0 件（`nullops` だけで検索すると作業ツリーのパスを含む Node のプロセスに当たるため、実行ファイルのパスで絞る）
+  - [x] 6.2 検証手段の成立を通しで確認する。`go vet ./...`・`go test ./...`（1 件以上のテストが実行される）・`cd frontend && npm ci && npm run lint`・`wails build` がいずれも終了コード 0 で終わり、`build/bin` に起動できるアプリが生成されることを確認する。結果を `## Implementation Notes` へ記録する
+    _Requirements: 10.2, 10.3, 10.4, 10.5_
+    _Boundary: Verification_
+    _Depends: 6.1_
+    - 対象ファイル: `docs/specs/001-dashboard-mvp/001-dashboard-shell/tasks.md`(変更)
+    - 仕様参照: spec.md §7 Requirement 10
+    - 検証コマンド: `go vet ./... && go test ./... && (cd frontend && npm ci && npm run lint) && wails build` / 生成された `build/bin` のアプリを起動して 6 枠とログの流入を目視する
+
+## Implementation Notes
+
+### 知識 port の選択
+
+- `python3 .claude/skills/dev-core/scripts/ports.py --skill dev-implement --root docs/dev/ports` は「port ルートが存在しない」で終了した。本リポジトリに `docs/dev/ports/` が無いため、**注入知識なし**で実装する。規約は `CLAUDE.md`(言語規約・Go / TypeScript コーディング規約)を正本とする。
+
+### 実行環境の制約(この実装セッション)
+
+- **画面を撮って確かめられない**。`screencapture` は sandbox の内外いずれでも `could not create image from display` で失敗する(macOS の画面収録権限がターミナルへ付与されていない)。したがって tasks.md の検証コマンドのうち**画面の見え方に依存するもの**は実行できず、`UNVERIFIED` として記録し、人間が実施すべき確認手順を残す。静的検査・自動テスト・`grep`・コマンド出力から判定できるものは通常どおり実行する。
+- コードを一時的に壊して確認する手順(タスク 1.6 の枠を 5 個に減らす操作、タスク 5.6 の `loadSnapshot` を reject させる操作)は**実行しない**。目視で確かめられない以上、壊す操作に意味がなく、元へ戻し忘れる危険だけが残るため。該当する受け入れ基準を満たす実装は書き、検証を `UNVERIFIED` として記録する。
+- メインタスク 1・2・3 は `(P)` だが**逐次実行**する。2 と 3 の検証はどちらも `go test ./...` でモジュール全体を回すため、同時進行させると片方の未完成コードでもう片方の検証が落ちる。
+
+### タスクを跨ぐ知見
+
+- `page.tsx` は `PANEL_TITLES.map(...)` の結果を `DashboardGrid` へ渡すため、`children` は **配列 1 個**になる。子要素数を数えるときは `React.Children.count`(配列を平坦化して数える)を使う。`Array.isArray(children)` や `children.length` で判定すると 1 と数えてしまう。
+- `page.tsx` は状態を持たなくなったため `'use client'` を外した(Server Component)。タスク 5.2 で `Log Stream` の中身を差し替えるときは `LogStreamPanel` 側に `'use client'` が要る。
+- `frontend/package.json` に型検査スクリプトは無いが `npx tsc --noEmit` は動く(typescript が devDependency にある)。Biome は型検査をしないため、参照の削除漏れの検出に有効。
+- 色の直値検査 `grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/...` は、対象に `frontend/src/app` を含めるとトークンの正本である `globals.css` に必ずヒットする。判定は `--include="*.tsx" --include="*.ts"` で絞って行う(トークン定義そのものは違反ではない)。
+- `frontend/public/logo-universal.png` はタスク 1.5 でどこからも参照されなくなった。spec.md §2 が `frontend/public` の画像をスコープ外としているため本作業単位では削除しない(後続への申し送り)。
+
+- `DashboardGrid` は **Server Component のまま**にする(`'use client'` を付けない)。個数検査の `console.error` を描画中に呼ぶことで出力が 1 回に収まるためである。`'use client'` を付けると React Strict Mode(Next.js 16 の App Router で既定 `true`)が開発時に描画を 2 回呼び、受け入れ基準 1.4 の「1 回」を破る。`useEffect` へ逃がした場合も同じ理由で 2 回出る。
+- 上の帰結として、`DashboardGrid` の `console.error` の**出力先は WebView の DevTools ではない**。`wails dev` を動かしているターミナル(Next.js の開発サーバのログ)と、`wails build` のビルドログに出る。tasks.md 1.6 の検証コマンドは「DevTools のコンソール」と書いているが、spec.md §5.7 と受け入れ基準 1.4 は出力先を規定していないため、正本である spec.md 基準では合格。**確認するときはターミナルを見ること**。
+  - タスク 1.6 のレビュアーがリポジトリ外の隔離コピー(実リポジトリは非改変)で実測し、5 枠にしたときに `next build` で 1 件・`next dev` で 1 件、6 枠のときに 0 件、5 枠すべてが描画されることを確認済み。
+- タスク 5.2 で `Log Stream` の中身を差し替えるときは、`'use client'` を `LogStreamPanel` 側に置く(`DashboardGrid` や `page.tsx` へ広げない)。
+- `next dev` を回すと Next.js 16 が `tsconfig.json` を自動書き換えし、`AGENTS.md` / `CLAUDE.md` を自動生成することがある。spec.md §2 は `tsconfig.json` の変更を対象外としているため、`wails dev` の実行後は `git status` を確認し、これらの自動変更を**コミットに混ぜない**こと。
+
+### Go 側の知見
+
+- パッケージ配置は spec.md §5 冒頭に従い、バインディングに現れる型(`LogLine` / `Level` / `Phase` / `DashboardSnapshot`)と `App` / `logSource` / `scenario` をリポジトリルートの `package main` に置く。`feed` パッケージからは `main` を import できないため、`logSource` は `feed.Source` を**構造的に満たすだけ**で `feed` を import しない。
+- `newLogLine(seq uint64, atMs int64, tool string, phase Phase, level Level, text string) (LogLine, error)`。タスク 2.1 の時点では error はつねに nil で、タスク 2.2 が先頭に検証分岐を足す。
+- `logline_test.go` の `TestLogLineJSON` が JSON の直列化結果を文字列リテラルで固定している。`LogLine` のフィールドを増やす後続作業単位はこの期待値の更新が要る(これはバインディング経由でフロントエンドの契約になるため、意図的に固定している)。
+- **`Seq == 0` の拒否の割り当て**: spec.md §6.1 は「`Seq` は 1 から始まり 1 ずつ増加する」を**生成時に強制する不変条件**に挙げ、受け入れ基準 4.4 は「不変条件を満たさない生成要求には error を返す」と定める。一方 tasks.md 2.2 が列挙する違反 5 件に `Seq` は含まれない(採番そのものは 4.1 としてタスク 2.5 の `logSource` の責務)。コンストラクタ単体では「1 ずつ増加」は原理的に検査できないが「1 から始まる」(= `Seq == 0` を拒否する)は検査できるため、**タスク 2.2 で 6 件目の違反として実装した**。タスク定義の列挙を減らす変更ではなく、spec.md の不変条件を満たすための追加である。
+
+- `newLogLine` の不変条件違反は**非公開の sentinel error 6 本**(`errLogLineSeqZero` / `errLogLineToolEmpty` / `errLogLineTextEmpty` / `errLogLineTextNewline` / `errLogLineLevelUnknown` / `errLogLinePhaseUnknown`)で表し、`errors.Is` で判別できる。タスク 2.5 で候補集合を走査するテストは、`err != nil` を見るのではなくどの不変条件を破ったかまで表示できる。
+- `Level` / `Phase` に非公開の `valid() bool` がある(定義済み 4 値の `switch` 列挙)。タスク 2.5 で候補集合やフェーズ値を検査するときに再利用できる。
+- `AtMs` には spec.md §6.1 に不変条件の記載が無いため検証を入れていない(負値も 0 も受け付ける)。
+- 複数の不変条件を同時に破る入力では、引数順(Seq → Tool → Phase → Level → Text)で最初に当たった 1 件を返す。spec.md は複数違反の報告方法を規定していないため最小実装とした。
+
+- **`math/rand/v2` は使えない(タスク 4.4 で判明)**。Wails v2.13.0 の `wails build` は bindings 生成の段で `internal error: package "math/rand/v2" without types was imported from "nullops"` で落ちる。同じ生成を単独で行う `wails generate module` は成功するため、`build` 側の `packages.Load` の LoadMode の違いが原因と見られる。spec.md は乱数生成器のパッケージを規定していないため、`math/rand`(v1)へ移した(`NewPCG` → `NewSource`、`Int64N` → `Int63n`、`IntN` → `Intn`)。擬似データの見え方が起動ごとに変わればよく暗号強度は要らないため、v1 で要件を満たす。**後続の作業単位も `math/rand/v2` を import しないこと。**
+- `wails generate module` は `wails build` より速く bindings だけを再生成する。バインディングの型を確かめたいだけのときはこちらを使う。
+- `build/bin` / `frontend/dist` / `frontend/wailsjs` は `.gitignore` 済みで、`wails build` 後の `git status` はクリーンだった。Next.js 16 による `tsconfig.json` / `AGENTS.md` / `CLAUDE.md` の自動書き換えも `wails build` では起きなかった(`next dev` 固有と見られる)。
+
+- タスク 5.1 の検証コマンド `grep -rn "EventsOff" frontend/src` は**コメント中の語にも当たる**。`EventsOff` を使わない理由をコメントへ書くと 0 件にならないため、その API 名を書かずに理由だけを残した(「イベント名に紐づく全リスナーを外す側の API を使わない」)。
+- `frontend/wailsjs` は `.gitignore` 済みだが、`frontend/src/lib/feed.ts` はそこから型と関数を import する。したがって**チェックアウト直後に `npm run lint` / `npx tsc --noEmit` は通らない**。先に `wails build` か `wails generate module` でバインディングを生成すること。
+
+### 検証手段の成立(タスク 6.2 の結果)
+
+`go vet ./... && go test ./... && (cd frontend && npm ci && npm run lint) && wails build` を通しで実行し、終了コード 0 で完了した(2026-09-01)。
+
+| 検証コマンド | 結果 |
+| :- | :- |
+| `go vet ./...` | 指摘なし |
+| `go test -count=1 ./...` | `ok nullops` / `ok nullops/feed`。PASS したテスト 52 件(最終検証パネル後の再実行時。通し実行の時点では 50 件) |
+| `npm ci` | 49 packages を追加して完了 |
+| `npm run lint`(Biome) | 12 ファイルを検査、指摘なし |
+| `wails build` | `build/bin/nullops.app` を生成(署名まで完了) |
+
+- `wails build` の後の `git status` はクリーンだった。`build/bin` / `frontend/dist` / `frontend/wailsjs` は `.gitignore` 済みで、Next.js による `tsconfig.json` / `AGENTS.md` / `CLAUDE.md` の自動書き換えも起きなかった。
+- 生成されたアプリを**起動しての目視は未実施**(下の未検証項目を参照)。
+
+### 未検証項目(人間が確認すべきこと)
+
+- **タスク 1.5**(受け入れ基準 1.1 の見え方・8.3・8.4)。`wails dev` を起動し、次を目視する。(1) 6 枠が 3 列 × 2 行に並び、見出しが 1 行目 左から `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左から `Dependency Graph` / `Utilization` / `Scatter 3D` であること。(2) 各枠の中身の位置に `pending` が出ていること。(3) ロゴ画像・名前入力欄・Greet ボタンが無いこと。(4) ウィンドウを最大化・縮小しても 6 枠が表示領域に追随し、ページ全体に縦横どちらのスクロールバーも出ないこと。
+  - 静的には満たしている: `DashboardGrid` が `h-dvh grid-cols-3 grid-rows-2 overflow-hidden`、`Panel` が `min-h-0 overflow-hidden`。見出し 6 文字列と並び順は spec.md §5.7 の表と一致(レビュー確認済み)。
+- **タスク 1.6** は隔離コピーでの実測で受け入れ基準 1.4 を確認済みのため、追加の人手確認は不要。ただし実リポジトリ上での目視は未実施。
+- **タスク 4.5**(受け入れ基準 8.1・8.2)。`wails dev` を起動し、DevTools のコンソールで `console.log(window.outerWidth, window.outerHeight)` が `1440 900` を示すこと、ウィンドウを手で縮めても同じ値が `1100 720` を下回らないことを確認する。
+  - 静的には満たしている: `main.go` の `options.App` に `Width: 1440` / `Height: 900` / `MinWidth: 1100` / `MinHeight: 720` を設定済み。`go vet ./...` と `go test ./...` は通る。
+  - 注意: `window.outerWidth` はウィンドウ全体、`innerWidth` は WebView の内側を指す。macOS ではタイトルバーの分だけ `outerHeight` が `innerHeight` より大きくなるため、900 と比べるのは `outerHeight` の方である。
+- **タスク 5.2**(受け入れ基準 3.1・3.5)。`wails dev` を起動し、DevTools で次を確認する。(1) 起動直後に `Log Stream` 枠へ行が表示されること。(2) `$$('#__next li')` などで拾った行の `Seq` に重複と欠落が無いこと(Seq は連番なので `key` の並びが 1 ずつ増えることを見る)。
+  - 静的には満たしている: 購読を先に開始してから `loadSnapshot()` を呼び、`Seq` を鍵にした `Map` で重複を落として昇順に並べている。取得中に届いた行も `setLines` の関数形で保持される。
+- **タスク 5.3**(受け入れ基準 2.5・2.6)。`wails dev` を 2 分以上流し、DevTools のコンソールで `document.querySelectorAll("li").length` が 300 を超えないことを確認する。
+  - 静的には満たしている: `mergeBySeq` が併合後に末尾 300 行へ切り詰める。Go 側の保持上限は 500 行なので、スナップショットだけでも上限に当たる。
+- **タスク 5.4**(受け入れ基準 2.7・8.5)。`wails dev` を起動し、`Log Stream` 枠で次の両分岐を目視する。(1) 下端に居るあいだは行の追加に合わせて表示が下端に張り付くこと。(2) 枠の中を上へスクロールすると位置が保たれ、追従しないこと。(3) 下端付近(16 ピクセル以内)まで戻すと追従が再開すること。(4) いずれの操作でもページ全体には縦横のスクロールバーが出ないこと。
+  - 静的には満たしている: `LogStreamPanel` が自前の `h-full overflow-y-auto` のスクロール領域を持ち、`onScroll` で下端からの距離が 16 ピクセル以内かを `followingRef` に記録し、`useLayoutEffect` が追従中だけ `scrollTop = scrollHeight` を書く。
+  - 追従の判定を state ではなく ref に置いているため、スクロール中に再描画は起きない。
+- **タスク 5.5**(受け入れ基準 9.2・9.3・9.4)。`wails dev` を起動し、`Log Stream` 枠で次を目視する。(1) `info` / `warn` / `error` / `debug` の 4 値が互いに異なる色で出ること(それぞれ青・黄・赤・灰)。(2) 本文が等幅で表示されること。(3) 時刻列・工具列・重大度列・本文列の左端が、行が変わっても揃うこと。
+  - 静的には満たしている: 重大度は `LEVEL_CLASS` で `text-level-info` / `-warn` / `-error` / `-debug` へ写し(色の直値は書かず `globals.css` の `@theme` を正本とする)、行は `font-mono` と固定幅の列(`w-20` / `w-16` / `w-12`)で組んでいる。`grep -rnE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components frontend/src/lib` は 0 件。
+  - 本文は折り返す(`whitespace-pre-wrap break-all`)。長い行で枠へ横スクロールを出さないためであり、折り返した 2 行目以降も本文列の左端に揃う。
+- **タスク 5.6**(受け入れ基準 3.6)。tasks.md の検証コマンドは `loadSnapshot` を一時的に reject させる操作を求めるが、**この操作は実行していない**(承認済みの方針: 画面を目視できない環境で、元へ戻し忘れる危険だけが残るため)。人間が確認する場合は `frontend/src/lib/feed.ts` の `loadSnapshot` を一時的に `Promise.reject(new Error('test'))` を返す実装へ差し替え、`wails dev` で (1) 画面が 0 行で始まり以後の差分で埋まること、(2) 枠にエラー表示が出ないこと、(3) DevTools のコンソールにだけ「初期スナップショットの取得に失敗した。0 行で開始する」が出ることを確かめ、**必ず元へ戻す**こと。
+  - 静的には満たしている: `loadSnapshot()` の `.catch` が `console.error` のみを行い、`lines` の初期値 `[]` のまま購読を続ける。
+- **タスク 6.1**(受け入れ基準 2.9、spec.md §3 前提 2、roadmap.md §1.1 の完了条件)。`wails dev` を起動し、次を確認する。
+  1. DevTools のコンソールで `let n=0; const off=window.runtime.EventsOn('nullops:log', b => { n += b.length }); setTimeout(() => { console.log(n); off() }, 30000)` を実行し、30 秒後の合計が 60 以上であること。
+  2. 1440 × 900 で 6 枠の見出しと中身が読めること。
+  3. ウィンドウを閉じた後に `pgrep -fl "build/bin/nullops"` が 0 件であること(`nullops` だけで検索すると作業ツリーのパスを含む Node のプロセスに当たる)。
+  4. 起動時の地色が `--color-surface-0`(`#10141c`)とずれて見えるか。`main.go` の `BackgroundColour` はテンプレート由来の直値 `RGBA{27, 38, 54}` のままであり(spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため本作業単位では変更しない)、起動直後のわずかな時間だけ別の色が見える可能性がある。見えた場合は後続の作業単位への申し送りとする。
+  - **流入量(1 の 60 行以上)は計算で満たすことが分かっている**: 送出間隔は `logMinInterval` 80 ミリ秒〜`logMaxInterval` 400 ミリ秒であり、最悪(つねに 400 ミリ秒)でも 30 秒で 75 行、平均(240 ミリ秒)なら約 125 行になる。停止しないことは `feed.Runner` が context のキャンセルまで回り続ける実装と、その振る舞いを固定した `feed/runner_test.go` で担保している。目視で確かめるのは「実際に画面へ流れ続けるか」である。
+- **タスク 6.2 の目視部分**。`build/bin/nullops.app` を起動し、6 枠が並ぶことと `Log Stream` へログが流入し続けることを確認する。
+
+### 最終検証パネルの結果(2026-09-01)
+
+観点別レビュー 3 件(Go バックエンドの正しさ・並行性・ライフサイクル / フロントエンドの実装と受け入れ基準の網羅 / 受け入れ基準の網羅性と文書・成果物の整合)をすべて実行し、**3 件とも GO**。spec.md の受け入れ基準 61 件はすべて「自動テストで担保 34 件・静的に確認 12 件・目視待ち 15 件」のいずれかへ割り当てられ、割り当て不能な基準は無い。最終の `go vet ./...` と `go test -count=1 ./...` は HEAD で成功(PASS 52 件、`-race` でも成功)。
+
+対応を見送った指摘(いずれも spec.md §2 / §6.5 の範囲外のため、後続の作業単位への申し送りとする):
+
+- `app.go` の `domReady` / `beforeClose` は `main.go` から結線されておらず到達しない。コメントも英語のままで CLAUDE.md の言語規約に反する。spec.md §2 が除去対象を `App.Greet` / `page.tsx` のデモ UI / `layout.tsx` の `metadata` に限るため触らない。
+- `main.go` に残るテンプレート由来の英語コメント。spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため触らない。
+- `feed/runner.go` の `waitOf` の比較が `d > minInterval` で、godoc の「1 ミリ秒で下限を切る」に対し境界が排他に読める。結果は同値のため欠陥ではない。
+- `DashboardGrid` の枠数検査(受け入れ基準 1.4)は `output: 'export'` により**ビルド時に 1 度だけ**動く。実行時の安全網にはならない。spec.md は検査の時点を規定していないため基準違反ではない。
+- 追従していないときに 300 行の上限で古い行が捨てられると、表示内容が上方向へずれる(スクロール位置の補正が無い)。spec.md にこの要求は無い。
+- `main` ブランチが先行し、dependabot により Wails が v2.13.0 → v2.14.0 へ上がっている。上の `math/rand/v2` の制約と spec.md §9 の実ソース参照は、v2.14.0 へ追従した時点で再確認が要る。

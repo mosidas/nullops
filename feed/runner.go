@@ -1,8 +1,11 @@
 package feed
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 )
 
 // 事前条件違反。
@@ -50,4 +53,42 @@ func NewRunner(emitter Emitter, sources ...Source) (*Runner, error) {
 
 	// 呼び出し側が可変長引数へ渡したスライスを後から書き換えても影響しないよう複製する。
 	return &Runner{emitter: emitter, sources: append([]Source(nil), sources...)}, nil
+}
+
+// Run は登録された Source を各自の間隔で回し、ctx がキャンセルされるまで送り続ける。
+//
+// Source ごとに独立したゴルーチンを割り当てるのは、ある Source の間隔が
+// 他の Source の送信周期に影響しないようにするため。
+//
+// 事前条件は ctx が nil でないこと、同一の Runner に対して 2 回以上呼ばないこと。
+// ctx.Done() が閉じた後、起動した全ゴルーチンの終了を待ってから戻る。
+func (r *Runner) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	wg.Add(len(r.sources))
+	for _, src := range r.sources {
+		go func() {
+			defer wg.Done()
+			r.loop(ctx, src)
+		}()
+	}
+	wg.Wait()
+}
+
+// loop は 1 つの Source を回す。
+func (r *Runner) loop(ctx context.Context, src Source) {
+	// タイマーは 1 本を Reset で使い回す。送信のたびに time.After を呼ぶと
+	// 高頻度(最短 80 ms)の周期でタイマーを作り続けることになるため。
+	timer := time.NewTimer(src.Interval())
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		r.emitter.Emit(src.EventName(), src.Next())
+		timer.Reset(src.Interval())
+	}
 }

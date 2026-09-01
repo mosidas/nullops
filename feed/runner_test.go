@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -172,5 +173,78 @@ func TestNewRunnerCopiesSources(t *testing.T) {
 	sources[0] = newFakeSource("mutated", time.Millisecond)
 	if got := r.sources[0].EventName(); got != "a" {
 		t.Errorf("呼び出し側の書き換えが Runner へ波及した: got %q, want %q", got, "a")
+	}
+}
+
+// waitFor は cond が真になるまで待つ。実時間に依存する検査の待ち合わせに使う。
+func waitFor(t *testing.T, timeout time.Duration, desc string, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("%s が %v 以内に成立しなかった", desc, timeout)
+}
+
+func TestRunEmitsWithEventNameAndPayload(t *testing.T) {
+	em := &fakeEmitter{}
+	src := newFakeSource("test:one", 2*time.Millisecond)
+	r, err := NewRunner(em, src)
+	if err != nil {
+		t.Fatalf("NewRunner が error を返した: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Run(ctx)
+	}()
+
+	waitFor(t, 2*time.Second, "3 件以上の送信", func() bool { return em.countOf("test:one") >= 3 })
+	cancel()
+	<-done
+
+	// Next の戻り値がそのまま payload として渡り、順序が保たれる。
+	for i, c := range em.snapshot() {
+		if c.eventName != "test:one" {
+			t.Fatalf("%d 番目のイベント名が一致しない: got %q, want %q", i, c.eventName, "test:one")
+		}
+		if c.payload != i+1 {
+			t.Fatalf("%d 番目の payload が一致しない: got %v, want %d", i, c.payload, i+1)
+		}
+	}
+}
+
+func TestRunIsolatesSourceIntervals(t *testing.T) {
+	em := &fakeEmitter{}
+	fast := newFakeSource("test:fast", time.Millisecond)
+	// 試験時間内に 1 回も送信しない Source。遅い Source が速い Source を止めないことを見る。
+	slow := newFakeSource("test:slow", time.Hour)
+
+	r, err := NewRunner(em, fast, slow)
+	if err != nil {
+		t.Fatalf("NewRunner が error を返した: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Run(ctx)
+	}()
+
+	waitFor(t, 2*time.Second, "速い Source の 20 件の送信", func() bool { return em.countOf("test:fast") >= 20 })
+	cancel()
+	<-done
+
+	if got := em.countOf("test:slow"); got != 0 {
+		t.Errorf("遅い Source が送信した: got %d 件, want 0 件", got)
 	}
 }

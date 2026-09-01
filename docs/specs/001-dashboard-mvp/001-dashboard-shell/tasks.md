@@ -140,7 +140,7 @@
     - 対象ファイル: `feed/runner.go`(新規), `feed/runner_test.go`(変更)
     - 仕様参照: spec.md §5.3 `NewRunner`
     - 検証コマンド: `go vet ./... && go test ./...`
-  - [ ] 3.3 `Run` を実装する。`Source` ごとに独立したゴルーチンを割り当て、各自の `Interval()` だけ待ってから `Next()` を呼び、戻り値を `EventName()` のイベント名で `Emitter.Emit` へ渡す。ある `Source` の間隔が他の送信周期に影響しないことを検査する
+  - [x] 3.3 `Run` を実装する。`Source` ごとに独立したゴルーチンを割り当て、各自の `Interval()` だけ待ってから `Next()` を呼び、戻り値を `EventName()` のイベント名で `Emitter.Emit` へ渡す。ある `Source` の間隔が他の送信周期に影響しないことを検査する
     _Requirements: 6.1, 6.2_
     _Boundary: Runner_
     _Depends: 3.2_

@@ -13,7 +13,6 @@
       ],
       "agents": [
         ".claude/agents/dev-debugger.md",
-        ".claude/agents/dev-decompose-runner.md",
         ".claude/agents/dev-explorer.md",
         ".claude/agents/dev-implement-runner.md",
         ".claude/agents/dev-implementer.md",

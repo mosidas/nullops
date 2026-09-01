@@ -300,6 +300,7 @@ ANNOTATION_RE = re.compile(
 FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
 HEADING_RE = re.compile(r"^#{1,6}\s")
 MARKERS = ("[要確認:", "UNVERIFIED")
+TOOL_MARKUP_RE = re.compile(r"^\s*</[A-Za-z][\w.:-]*>\s*$")
 AMBIGUOUS_WORDS = ("適切に", "高速に", "柔軟に", "十分な", "ユーザーフレンドリー")
 
 
@@ -415,6 +416,27 @@ def find_markers(path: Path) -> list[tuple[int, str]]:
         for marker in MARKERS:
             if marker in line:
                 found.append((i, marker))
+    return found
+
+
+def find_tool_markup(path: Path) -> list[tuple[int, str]]:
+    """行全体が閉じタグ 1 個で構成される行(ツールのマークアップ混入)の (行番号, タグ) を返す。
+
+    生成セッションのツールのマークアップ(</content>・</invoke> 等)が中間生成物へ
+    混入したままコミットされる事故を検出する。コードフェンス内はサンプルとして
+    正当に閉じタグを含みうるため対象外。インラインコードでの引用は行全体が
+    タグにならないため一致しない。
+    """
+    found: list[tuple[int, str]] = []
+    in_fence = False
+    for i, line in enumerate(read_lines(path), start=1):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if TOOL_MARKUP_RE.match(line):
+            found.append((i, line.strip()))
     return found
 
 

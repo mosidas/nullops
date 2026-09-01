@@ -162,7 +162,7 @@
     - 仕様参照: spec.md §5.3 不変条件・キャンセル後の送信
     - 検証コマンド: `go vet ./... && go test -race ./...` / `Run` の復帰後に擬似 `Emitter` の記録件数が増えないこと、`runtime.NumGoroutine()` が `Run` の呼び出し前の水準へ戻ることを検査する
 
-- [ ] 4. アプリへの結線（ライフサイクル・スナップショット・イベント送信）
+- [x] 4. アプリへの結線（ライフサイクル・スナップショット・イベント送信）
   - [x] 4.1 `feed.Emitter` の Wails 実装（`runtime.EventsEmit` へ委譲）を追加し、`App` を spec.md §6.5 の形（ctx / cancel / done）へ改める。`startup` は `context.Background()` から派生させたキャンセル可能な context を生成し、`scenario`(minHold 15 秒・maxHold 45 秒)と `logSource`(capacity 500・専用の `*rand.Rand`)を組み立て、`logSource` を登録した `Runner` をその context で開始して `nullops:log` イベントに `LogLine` の配列を送出する
     _Requirements: 2.1, 5.3, 7.1, 7.2_
     _Boundary: App_
@@ -199,7 +199,7 @@
     - 仕様参照: spec.md §6.5「`main.go` の変更」, §9 `pkg/options/options.go:41-42`
     - 検証コマンド: `go vet ./... && go test ./...` / `wails dev` を起動し、DevTools のコンソールで `console.log(window.outerWidth, window.outerHeight)` が 1440 × 900 を示すことを確認する / ウィンドウを縮めても同じ値が 1100 × 720 を下回らないことを確認する
 
-- [ ] 5. ログストリームパネル（購読・併合・描画）
+- [x] 5. ログストリームパネル（購読・併合・描画）
   - [x] 5.1 `subscribeLog` と `loadSnapshot` を実装する。`subscribeLog` は `EventsOn` が返す解除関数をそのまま返し、`EventsOff` を使わない（そのハンドラだけが解除される）。型は `wailsjs/go/models` の `main.LogLine` / `main.DashboardSnapshot` を使う（この生成物はタスク 4.4 の `wails build` で作られる）
     _Requirements: 2.8_
     _Boundary: FeedClient_
@@ -243,7 +243,7 @@
     - 仕様参照: spec.md §5.6 エラー, §8「画面にエラーを出さない」
     - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で `loadSnapshot` を一時的に reject させ、画面が 0 行で開始し以後の差分で埋まること・コンソールにのみ出力されることを確認したうえで元に戻す
 
-- [ ] 6. 通し検証（受け入れ確認）
+- [x] 6. 通し検証（受け入れ確認）
   - [x] 6.1 `wails dev` を 30 秒間観察し、ログストリームへ 60 行以上が流入して停止しないことを確認する。あわせて spec.md §3 の前提 2（1440 × 900 で 6 枠が読める）と、ウィンドウを閉じたときにプロセスが残留しないこと（roadmap.md §1.1 の完了条件）を確認する。起動時の地色（`main.go` の `BackgroundColour` はテンプレート由来の直値であり、spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため本作業単位では変更しない）が `--color-surface-0` とずれて見える場合は、後続作業単位への申し送りとして観察結果に記録する。観察結果を `## Implementation Notes` へ記録する
     _Requirements: 2.9_
     _Boundary: Verification_

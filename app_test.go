@@ -273,3 +273,34 @@ func TestSnapshotIsCopy(t *testing.T) {
 		t.Error("戻り値への変更が内部へ波及した。Snapshot は別の配列を返さなければならない")
 	}
 }
+
+func TestStartupIgnoresWailsContextCancel(t *testing.T) {
+	// 受け入れ基準 7.1 の回帰止め。Run へ渡す context を引数の ctx から派生させると
+	// このテストだけが落ちる（Wails の ctx はキャンセルされない前提が崩れても気付ける）。
+	a, em := newTestApp()
+	wailsCtx, cancelWails := context.WithCancel(context.Background())
+	a.startup(wailsCtx)
+	defer stopApp(t, a)
+
+	waitFor(t, 5*time.Second, "送出の開始", func() bool { return len(em.snapshot()) >= 1 })
+
+	cancelWails()
+	before := len(em.snapshot())
+	waitFor(t, 5*time.Second, "Wails の ctx のキャンセル後の送出", func() bool {
+		return len(em.snapshot()) > before
+	})
+}
+
+func TestStartupUsesSpecifiedParameters(t *testing.T) {
+	// 受け入れ基準 2.3（保持 500 行）と 5.3（15 秒〜45 秒）の結線値を固定する。
+	// logSource / scenario 自体のテストは小さい値で回すため、ここでしか守れない。
+	if appLogCapacity != 500 {
+		t.Errorf("保持上限が一致しない: got %d, want 500", appLogCapacity)
+	}
+	if appMinHold != 15*time.Second {
+		t.Errorf("minHold が一致しない: got %v, want 15s", appMinHold)
+	}
+	if appMaxHold != 45*time.Second {
+		t.Errorf("maxHold が一致しない: got %v, want 45s", appMaxHold)
+	}
+}

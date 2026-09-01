@@ -129,7 +129,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`
 
 - [ ] 5. `CommitGraphPanel` の描画
-  - [ ] 5.1 パネルの骨格・購読とスナップショットの併合・寸法追随を作る
+  - [x] 5.1 パネルの骨格・購読とスナップショットの併合・寸法追随を作る
     _Requirements: 8.1, 8.2, 8.4, 8.5, 11.1, 11.2, 11.3, 11.7_
     _Boundary: CommitGraphPanel_
     _Depends: 4.1_

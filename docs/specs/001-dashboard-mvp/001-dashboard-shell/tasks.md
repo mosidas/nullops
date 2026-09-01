@@ -111,7 +111,7 @@
     - 対象ファイル: `scenario.go`(変更), `scenario_test.go`(変更)
     - 仕様参照: spec.md §6.4 `Current` の事後条件
     - 検証コマンド: `go vet ./... && go test ./...`
-  - [ ] 2.5 `logSource` を実装する。`EventName()` は固定値、`Interval()` は 80〜400 ms の一様乱数、`Next()` は長さ 1 の `[]LogLine` を返す。`Seq` を 1 から 1 ずつ自身で採番し、`Phase` にその時点の `scenario.Current()` を設定し、フェーズごとに異なる英語の `Tool` / `Text` 候補集合から行を組み立てる。`*rand.Rand` は `scenario` と共有せず、mutex で並行安全にする
+  - [x] 2.5 `logSource` を実装する。`EventName()` は固定値、`Interval()` は 80〜400 ms の一様乱数、`Next()` は長さ 1 の `[]LogLine` を返す。`Seq` を 1 から 1 ずつ自身で採番し、`Phase` にその時点の `scenario.Current()` を設定し、フェーズごとに異なる英語の `Tool` / `Text` 候補集合から行を組み立てる。`*rand.Rand` は `scenario` と共有せず、mutex で並行安全にする
     _Requirements: 2.2, 4.1, 4.5, 5.4, 5.5_
     _Boundary: LogSource_
     _Depends: 2.1, 2.3_

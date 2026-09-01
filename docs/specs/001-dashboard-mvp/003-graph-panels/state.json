@@ -1,0 +1,10 @@
+{
+  "workflow": "sdd",
+  "unit": "graph-panels",
+  "state": "spec-approved",
+  "approvals": {
+    "spec": true
+  },
+  "created": "2026-09-01",
+  "updated": "2026-09-01"
+}

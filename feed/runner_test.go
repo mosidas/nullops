@@ -3,7 +3,9 @@ package feed
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -288,4 +290,115 @@ func TestRunClampsIntervalBelowOneMillisecond(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunStopsEmittingAfterCancel(t *testing.T) {
+	em := &fakeEmitter{}
+	r, err := NewRunner(em, newFakeSource("test:a", time.Millisecond), newFakeSource("test:b", time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewRunner が error を返した: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Run(ctx)
+	}()
+
+	waitFor(t, 2*time.Second, "両方の Source の送信", func() bool {
+		return em.countOf("test:a") >= 3 && em.countOf("test:b") >= 3
+	})
+
+	cancel()
+	<-done
+
+	// Run が戻った時点の件数から増えないこと。
+	after := len(em.snapshot())
+	time.Sleep(50 * time.Millisecond)
+	if got := len(em.snapshot()); got != after {
+		t.Errorf("Run の復帰後に送信が増えた: got %d 件, want %d 件", got, after)
+	}
+}
+
+func TestRunLeavesNoGoroutine(t *testing.T) {
+	em := &fakeEmitter{}
+	r, err := NewRunner(em, newFakeSource("test:a", time.Millisecond), newFakeSource("test:b", 5*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewRunner が error を返した: %v", err)
+	}
+
+	before := runtime.NumGoroutine()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Run(ctx)
+	}()
+
+	waitFor(t, 2*time.Second, "送信の開始", func() bool { return len(em.snapshot()) >= 3 })
+	cancel()
+	<-done
+
+	// Run を呼んだ側のゴルーチン(done を閉じる 1 本)は、close の直後に
+	// まだ終了しきっていないことがあるため少しの猶予を持って判定する。
+	waitFor(t, time.Second, "ゴルーチン数が呼び出し前の水準へ戻ること", func() bool {
+		return runtime.NumGoroutine() <= before+1
+	})
+}
+
+func TestRunCompletesEmitInFlightOnCancel(t *testing.T) {
+	// キャンセルの時点で実行中だった Emit の 1 回は完了させる(spec.md §5.3)。
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	em := &blockingEmitter{entered: entered, release: release}
+
+	r, err := NewRunner(em, newFakeSource("test:block", time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewRunner が error を返した: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Run(ctx)
+	}()
+
+	<-entered
+	cancel()
+
+	select {
+	case <-done:
+		t.Fatalf("実行中の Emit を待たずに Run が戻った")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("Emit の完了後も Run が戻らない")
+	}
+
+	if got := em.completed.Load(); got != 1 {
+		t.Errorf("完了した Emit の回数が一致しない: got %d, want 1", got)
+	}
+}
+
+// blockingEmitter は release が閉じるまで Emit の中で止まる擬似 Emitter。
+type blockingEmitter struct {
+	entered   chan struct{}
+	release   chan struct{}
+	completed atomic.Int64
+}
+
+func (e *blockingEmitter) Emit(string, any) {
+	select {
+	case e.entered <- struct{}{}:
+	default:
+	}
+	<-e.release
+	e.completed.Add(1)
 }

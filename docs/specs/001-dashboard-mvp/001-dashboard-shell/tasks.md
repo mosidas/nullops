@@ -126,7 +126,7 @@
     - 仕様参照: spec.md §6.3 不変条件・`Snapshot` の事後条件
     - 検証コマンド: `go vet ./... && go test -race ./...` / `capacity + 1` 行目の生成後に保持件数が `capacity`・`Seq` が昇順連続・返り値への変更が内部へ波及しないことを検査する
 
-- [ ] 3. (P) 生成器の駆動機構（Go / feed パッケージ）
+- [x] 3. (P) 生成器の駆動機構（Go / feed パッケージ）
   - [x] 3.1 `feed` パッケージを作り、`Source` と `Emitter` を利用側パッケージとして定義する。テスト用の擬似 `Emitter`（送信を記録する）と擬似 `Source` を用意し、Wails ランタイムを起動せずに `feed` のテストが実行できることを示す
     _Requirements: 10.1_
     _Boundary: Feed_
@@ -154,7 +154,7 @@
     - 対象ファイル: `feed/runner.go`(変更), `feed/runner_test.go`(変更)
     - 仕様参照: spec.md §7 Requirement 6.4
     - 検証コマンド: `go vet ./... && go test ./...` / 0 と負値を返す擬似 `Source` で、一定時間の送信回数が 1 ミリ秒間隔の上限を超えないことを検査する
-  - [ ] 3.5 キャンセル時の停止保証を実装する。`ctx.Done()` が閉じた後に `Emitter.Emit` を新たに開始せず、起動した全ゴルーチンの終了を待ってから `Run` が戻る（戻った時点でこの `Runner` のゴルーチンは 0 個）
+  - [x] 3.5 キャンセル時の停止保証を実装する。`ctx.Done()` が閉じた後に `Emitter.Emit` を新たに開始せず、起動した全ゴルーチンの終了を待ってから `Run` が戻る（戻った時点でこの `Runner` のゴルーチンは 0 個）
     _Requirements: 7.4, 7.5_
     _Boundary: Runner_
     _Depends: 3.3_

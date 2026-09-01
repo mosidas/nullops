@@ -91,6 +91,13 @@ func (r *Runner) loop(ctx context.Context, src Source) {
 		case <-timer.C:
 		}
 
+		// select は両方が受信可能なとき無作為に選ぶため、待ち時間が尽きたのと
+		// ほぼ同時にキャンセルされた場合に timer.C 側へ倒れうる。ここで
+		// もう一度検査して、キャンセル後に Emit を新たに開始しないようにする。
+		if ctx.Err() != nil {
+			return
+		}
+
 		r.emitter.Emit(src.EventName(), src.Next())
 		timer.Reset(waitOf(src))
 	}

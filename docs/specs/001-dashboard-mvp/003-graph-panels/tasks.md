@@ -146,7 +146,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §7 Requirement 9・11.4〜11.6, §6.8 デザイントークン, §8 実現方針(色の解決・再描画の駆動)
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`, `grep -rn '#[0-9a-fA-F]\{3,8\}' --include="*.ts" --include="*.tsx" frontend/src`(色の直値が無いこと)
 
-- [ ] 6. `DependencyGraphPanel` の描画
+- [x] 6. `DependencyGraphPanel` の描画
   - [x] 6.1 パネルの骨格・購読とスナップショットの併合・寸法追随を作る
     _Requirements: 8.1, 8.3, 8.4, 8.5, 11.1, 11.2, 11.3, 11.7_
     _Boundary: DependencyGraphPanel_
@@ -155,7 +155,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/components/DependencyGraphPanel.tsx`(新規)
     - 仕様参照: spec.md §5.7 `DependencyGraphPanel`, §7 Requirement 8.1・8.3・8.4・8.5・11.1・11.2・11.3・11.7
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`
-  - [ ] 6.2 依存グラフの描画(エッジとノード・健康状態の色・座標の補間)を作る
+  - [x] 6.2 依存グラフの描画(エッジとノード・健康状態の色・座標の補間)を作る
     _Requirements: 10.4, 10.5, 10.6, 10.7, 10.8, 10.9, 11.4, 11.5, 11.6_
     _Boundary: DependencyGraphPanel_
     _Depends: 6.1, 4.3_

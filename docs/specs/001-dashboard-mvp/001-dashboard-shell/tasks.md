@@ -147,7 +147,7 @@
     - 対象ファイル: `feed/runner.go`(変更), `feed/runner_test.go`(変更)
     - 仕様参照: spec.md §5.3 `Run`, §7 Requirement 6
     - 検証コマンド: `go vet ./... && go test -race ./...` / 短い間隔（数ミリ秒）を返す擬似 `Source` を 2 個登録し、擬似 `Emitter` の記録がイベント名ごとに独立して増えることを検査する
-  - [ ] 3.4 `Source.Interval()` が事後条件に反して 1 ミリ秒未満を返した場合に、待ち時間を 1 ミリ秒として扱う分岐を実装する（ビジーループに陥らない）
+  - [x] 3.4 `Source.Interval()` が事後条件に反して 1 ミリ秒未満を返した場合に、待ち時間を 1 ミリ秒として扱う分岐を実装する（ビジーループに陥らない）
     _Requirements: 6.4_
     _Boundary: Runner_
     _Depends: 3.3_

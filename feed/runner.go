@@ -19,6 +19,9 @@ var (
 	ErrDuplicateEventName = errors.New("feed: Source の EventName が重複している")
 )
 
+// minInterval は Source の待ち時間の下限。
+const minInterval = time.Millisecond
+
 // Runner は登録された Source を各自の間隔で回し、Emitter へ送る。
 type Runner struct {
 	emitter Emitter
@@ -78,7 +81,7 @@ func (r *Runner) Run(ctx context.Context) {
 func (r *Runner) loop(ctx context.Context, src Source) {
 	// タイマーは 1 本を Reset で使い回す。送信のたびに time.After を呼ぶと
 	// 高頻度(最短 80 ms)の周期でタイマーを作り続けることになるため。
-	timer := time.NewTimer(src.Interval())
+	timer := time.NewTimer(waitOf(src))
 	defer timer.Stop()
 
 	for {
@@ -89,6 +92,18 @@ func (r *Runner) loop(ctx context.Context, src Source) {
 		}
 
 		r.emitter.Emit(src.EventName(), src.Next())
-		timer.Reset(src.Interval())
+		timer.Reset(waitOf(src))
 	}
+}
+
+// waitOf は Source の次の待ち時間を返す。
+//
+// Interval() の事後条件は 1 ミリ秒以上だが、違反した Source を登録されても
+// ビジーループに陥らないよう 1 ミリ秒で下限を切る。Runner は Source の実装を
+// 選べないため、事後条件違反を検知して落とすより回り続ける方が害が小さい。
+func waitOf(src Source) time.Duration {
+	if d := src.Interval(); d > minInterval {
+		return d
+	}
+	return minInterval
 }

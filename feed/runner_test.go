@@ -248,3 +248,44 @@ func TestRunIsolatesSourceIntervals(t *testing.T) {
 		t.Errorf("遅い Source が送信した: got %d 件, want 0 件", got)
 	}
 }
+
+func TestRunClampsIntervalBelowOneMillisecond(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval time.Duration
+	}{
+		{name: "0 を返す", interval: 0},
+		{name: "負値を返す", interval: -time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			em := &fakeEmitter{}
+			r, err := NewRunner(em, newFakeSource("test:busy", tt.interval))
+			if err != nil {
+				t.Fatalf("NewRunner が error を返した: %v", err)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan struct{})
+			started := time.Now()
+			go func() {
+				defer close(done)
+				r.Run(ctx)
+			}()
+
+			time.Sleep(100 * time.Millisecond)
+			cancel()
+			<-done
+			elapsed := time.Since(started)
+
+			// 1 ミリ秒間隔の上限に、スケジューリングのばらつき分の余裕を足した数。
+			// ビジーループならこの桁に収まらない。
+			limit := int(elapsed/minInterval)*2 + 50
+			if got := em.countOf("test:busy"); got > limit {
+				t.Errorf("待ち時間の下限が効いていない: got %d 件, want %d 件以下 (%v)", got, limit, elapsed)
+			}
+		})
+	}
+}

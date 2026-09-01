@@ -193,7 +193,7 @@ func TestSnapshotEmptyMarshalsToEmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal が失敗した: %v", err)
 	}
-	if got, want := string(b), `{"log":[]}`; got != want {
+	if got, want := string(b), `{"log":[],"scatter":{"seq":0,"points":[]}}`; got != want {
 		t.Errorf("0 件のスナップショットの JSON = %s, 期待 %s", got, want)
 	}
 }
@@ -208,6 +208,53 @@ func TestSnapshotWithoutStartupIsEmpty(t *testing.T) {
 	}
 	if len(got.Log) != 0 {
 		t.Errorf("startup 前の Snapshot().Log の件数 = %d, 期待 0", len(got.Log))
+	}
+	// 受け入れ基準 4.2。
+	if got.Scatter.Points == nil {
+		t.Fatal("startup 前の Snapshot().Scatter.Points が nil。空配列でなければならない")
+	}
+	if len(got.Scatter.Points) != 0 {
+		t.Errorf("startup 前の Snapshot().Scatter.Points の件数 = %d, 期待 0", len(got.Scatter.Points))
+	}
+	if got.Scatter.Seq != 0 {
+		t.Errorf("startup 前の Snapshot().Scatter.Seq = %d, 期待 0", got.Scatter.Seq)
+	}
+}
+
+// 受け入れ基準 4.1・4.4: startup の後の Snapshot は点数ぶんの点を持つ。
+func TestSnapshotAfterStartupHasScatterPoints(t *testing.T) {
+	a, _ := newTestApp()
+	a.scatter = newScatterSource(scatterPointCount, newSeededRand())
+	a.scatter.Next()
+
+	got := a.Snapshot()
+	if got.Scatter.Points == nil {
+		t.Fatal("Snapshot().Scatter.Points が nil")
+	}
+	if len(got.Scatter.Points) != scatterPointCount {
+		t.Errorf("Snapshot().Scatter.Points の件数 = %d, 期待 %d", len(got.Scatter.Points), scatterPointCount)
+	}
+}
+
+// 受け入れ基準 4.3: Snapshot は scatterSource の Seq と座標を変えない。
+func TestSnapshotDoesNotAdvanceScatter(t *testing.T) {
+	a, _ := newTestApp()
+	a.scatter = newScatterSource(16, newSeededRand())
+	a.scatter.Next()
+
+	before := a.Snapshot().Scatter
+	for range 3 {
+		a.Snapshot()
+	}
+	after := a.Snapshot().Scatter
+
+	if before.Seq != after.Seq {
+		t.Errorf("Snapshot が Scatter.Seq を進めた: %d → %d", before.Seq, after.Seq)
+	}
+	for i := range before.Points {
+		if before.Points[i] != after.Points[i] {
+			t.Fatalf("Snapshot が点 %d を動かした: %+v → %+v", i, before.Points[i], after.Points[i])
+		}
 	}
 }
 

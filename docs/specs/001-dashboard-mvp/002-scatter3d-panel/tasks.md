@@ -45,15 +45,15 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 
 ## タスク一覧
 
-- [ ] 1. Go 側の点群の契約と生成器
-  - [ ] 1.1 `ScatterPoint`・`ScatterCloud` の型と不変条件の強制を作る
+- [x] 1. Go 側の点群の契約と生成器
+  - [x] 1.1 `ScatterPoint`・`ScatterCloud` の型と不変条件の強制を作る
     _Requirements: 2.1, 2.2, 2.3, 2.4_
     _Boundary: ScatterPoint_
     _Interfaces: Produces `newScatterPoint(x, y, z, w float64) (ScatterPoint, error)` / `ScatterPoint{X, Y, Z, W float64}` / `ScatterCloud{Seq uint64; Points []ScatterPoint}` / `errScatterPointOutOfRange` / `errScatterPointNotFinite`_
     - 対象ファイル: `scatterpoint.go`(新規), `scatterpoint_test.go`(新規)
     - 仕様参照: spec.md §6.1 `ScatterPoint`, §6.2 `ScatterCloud`
     - 検証コマンド: `go vet ./...`, `go test ./...`
-  - [ ] 1.2 `scatterSource` を作り `feed.Source` を構造的に満たす
+  - [x] 1.2 `scatterSource` を作り `feed.Source` を構造的に満たす
     _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.5, 3.1, 3.2, 10.2, 10.3_
     _Boundary: scatterSource_
     _Depends: 1.1_
@@ -61,7 +61,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `scattersource.go`(新規), `scattersource_test.go`(新規)
     - 仕様参照: spec.md §5.1 `scatterSource`, §6.4 内部状態, §7 Requirement 1・2.5・3・10.2・10.3
     - 検証コマンド: `go vet ./...`, `go test ./...`, `go test -race ./...`
-  - [ ] 1.3 `App` へ点群を配線し `Snapshot` に載せる
+  - [x] 1.3 `App` へ点群を配線し `Snapshot` に載せる
     _Requirements: 4.1, 4.2, 4.3, 4.4_
     _Boundary: App_
     _Depends: 1.2_
@@ -70,8 +70,8 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §5.2 `App.Snapshot`, §5.3 送信イベント, §6.3 `DashboardSnapshot`
     - 検証コマンド: `go vet ./...`, `go test ./...`, `wails build`
 
-- [ ] 2. フロントエンドの投影と購読(Go 側の契約に依存する薄い層)
-  - [ ] 2.1 投影の純関数 `projectPoint` を作る
+- [x] 2. フロントエンドの投影と購読(Go 側の契約に依存する薄い層)
+  - [x] 2.1 投影の純関数 `projectPoint` を作る
     _Requirements: 6.1, 6.2, 6.3_
     _Boundary: project_
     _Depends: 1.3_
@@ -79,7 +79,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/lib/project.ts`(新規)
     - 仕様参照: spec.md §5.6 投影関数, §8 実現方針(透視投影 `scale = f / (f - z')`)
     - 検証コマンド: `cd frontend && npm run lint`
-  - [ ] 2.2 `subscribeScatter` を `feed.ts` へ足す
+  - [x] 2.2 `subscribeScatter` を `feed.ts` へ足す
     _Requirements: 5.4_
     _Boundary: feed_
     _Depends: 1.3_
@@ -89,7 +89,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`
 
 - [ ] 3. `Scatter3DPanel` の描画
-  - [ ] 3.1 パネルの骨格と、購読・スナップショットの併合を作る
+  - [x] 3.1 パネルの骨格と、購読・スナップショットの併合を作る
     _Requirements: 5.1, 5.2, 5.3_
     _Boundary: Scatter3DPanel_
     _Depends: 2.2_
@@ -97,7 +97,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/components/Scatter3DPanel.tsx`(新規)
     - 仕様参照: spec.md §5.5 `Scatter3DPanel`, §7 Requirement 5
     - 検証コマンド: `cd frontend && npm run lint`
-  - [ ] 3.2 キャンバスの寸法を枠と `devicePixelRatio` へ追随させる
+  - [x] 3.2 キャンバスの寸法を枠と `devicePixelRatio` へ追随させる
     _Requirements: 8.1, 8.2, 8.3, 6.6_
     _Boundary: Scatter3DPanel_
     _Depends: 3.1_
@@ -105,7 +105,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/components/Scatter3DPanel.tsx`(変更)
     - 仕様参照: spec.md §7 Requirement 8, 6.6
     - 検証コマンド: `cd frontend && npm run lint`
-  - [ ] 3.3 `requestAnimationFrame` による回転のループを作る
+  - [x] 3.3 `requestAnimationFrame` による回転のループを作る
     _Requirements: 7.1, 7.2, 7.3, 7.4_
     _Boundary: Scatter3DPanel_
     _Depends: 3.2_
@@ -143,3 +143,16 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 ## Implementation Notes
 
 ### 進捗台帳
+
+サブタスクとコミットの対応。次のセッションが現在地を再導出する手掛かりとして残す。
+
+| サブタスク | コミット |
+| :- | :- |
+| 1.1 点群の型と不変条件の強制 | `1067605` |
+| 1.2 `scatterSource` | `561ebfd` |
+| 1.3 `App` への配線と `Snapshot` への搭載 | `8faa3f5` |
+| 2.1 `projectPoint` | `4ba1f29` |
+| 2.2 `subscribeScatter` | `35f58a4` |
+| 3.1 `Scatter3DPanel` の骨格と購読 | `d189649` |
+| 3.2 キャンバスの寸法の追随 | `076fd49` |
+| 3.3 `requestAnimationFrame` の回転ループ | `ea66ea2` |

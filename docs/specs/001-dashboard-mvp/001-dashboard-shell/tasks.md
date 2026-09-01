@@ -133,7 +133,7 @@
     - 対象ファイル: `feed/feed.go`(新規), `feed/runner_test.go`(新規)
     - 仕様参照: spec.md §5.1, §5.2, §8「`Emitter` を境界に置く理由」
     - 検証コマンド: `go vet ./... && go test ./...` / `grep -rn "wailsapp/wails" feed/` が 0 件
-  - [ ] 3.2 `NewRunner` の事前条件検査を実装する。nil の `Emitter` / 0 個の `Source` / 空文字の `EventName()` を返す `Source` / `EventName()` が重複する `Source` の 4 分岐それぞれに個別のテストケースを割り当て、いずれも nil の `Runner` と error を返す（`panic` しない）。事前条件を満たすときは非 nil と nil error を返す
+  - [x] 3.2 `NewRunner` の事前条件検査を実装する。nil の `Emitter` / 0 個の `Source` / 空文字の `EventName()` を返す `Source` / `EventName()` が重複する `Source` の 4 分岐それぞれに個別のテストケースを割り当て、いずれも nil の `Runner` と error を返す（`panic` しない）。事前条件を満たすときは非 nil と nil error を返す
     _Requirements: 6.3_
     _Boundary: Runner_
     _Depends: 3.1_

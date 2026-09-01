@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -95,5 +96,81 @@ func TestFakesSatisfyInterfaces(t *testing.T) {
 	}
 	if src.nextCount() != 1 {
 		t.Errorf("Next の呼び出し回数が一致しない: got %d, want 1", src.nextCount())
+	}
+}
+
+func TestNewRunnerAcceptsValidArguments(t *testing.T) {
+	r, err := NewRunner(&fakeEmitter{}, newFakeSource("a", time.Millisecond), newFakeSource("b", time.Millisecond))
+	if err != nil {
+		t.Fatalf("事前条件を満たすのに error を返した: %v", err)
+	}
+	if r == nil {
+		t.Fatalf("事前条件を満たすのに nil の Runner を返した")
+	}
+}
+
+func TestNewRunnerPreconditionViolation(t *testing.T) {
+	tests := []struct {
+		name    string
+		emitter Emitter
+		sources []Source
+		want    error
+	}{
+		{
+			name:    "Emitter が nil",
+			emitter: nil,
+			sources: []Source{newFakeSource("a", time.Millisecond)},
+			want:    ErrNilEmitter,
+		},
+		{
+			name:    "Source が 0 個",
+			emitter: &fakeEmitter{},
+			sources: nil,
+			want:    ErrNoSource,
+		},
+		{
+			name:    "EventName が空文字",
+			emitter: &fakeEmitter{},
+			sources: []Source{newFakeSource("", time.Millisecond)},
+			want:    ErrEmptyEventName,
+		},
+		{
+			name:    "EventName が重複",
+			emitter: &fakeEmitter{},
+			sources: []Source{newFakeSource("a", time.Millisecond), newFakeSource("a", time.Millisecond)},
+			want:    ErrDuplicateEventName,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 事前条件違反で panic しないこと（検査は error で返す）。
+			defer func() {
+				if v := recover(); v != nil {
+					t.Fatalf("事前条件違反で panic した: %v", v)
+				}
+			}()
+
+			r, err := NewRunner(tt.emitter, tt.sources...)
+			if r != nil {
+				t.Errorf("事前条件違反なのに非 nil の Runner を返した")
+			}
+			if !errors.Is(err, tt.want) {
+				t.Errorf("error が一致しない: got %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewRunnerCopiesSources(t *testing.T) {
+	sources := []Source{newFakeSource("a", time.Millisecond)}
+	r, err := NewRunner(&fakeEmitter{}, sources...)
+	if err != nil {
+		t.Fatalf("NewRunner が error を返した: %v", err)
+	}
+
+	sources[0] = newFakeSource("mutated", time.Millisecond)
+	if got := r.sources[0].EventName(); got != "a" {
+		t.Errorf("呼び出し側の書き換えが Runner へ波及した: got %q, want %q", got, "a")
 	}
 }

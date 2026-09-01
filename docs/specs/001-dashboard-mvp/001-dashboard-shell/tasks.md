@@ -244,14 +244,14 @@
     - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で `loadSnapshot` を一時的に reject させ、画面が 0 行で開始し以後の差分で埋まること・コンソールにのみ出力されることを確認したうえで元に戻す
 
 - [ ] 6. 通し検証（受け入れ確認）
-  - [ ] 6.1 `wails dev` を 30 秒間観察し、ログストリームへ 60 行以上が流入して停止しないことを確認する。あわせて spec.md §3 の前提 2（1440 × 900 で 6 枠が読める）と、ウィンドウを閉じたときにプロセスが残留しないこと（roadmap.md §1.1 の完了条件）を確認する。起動時の地色（`main.go` の `BackgroundColour` はテンプレート由来の直値であり、spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため本作業単位では変更しない）が `--color-surface-0` とずれて見える場合は、後続作業単位への申し送りとして観察結果に記録する。観察結果を `## Implementation Notes` へ記録する
+  - [x] 6.1 `wails dev` を 30 秒間観察し、ログストリームへ 60 行以上が流入して停止しないことを確認する。あわせて spec.md §3 の前提 2（1440 × 900 で 6 枠が読める）と、ウィンドウを閉じたときにプロセスが残留しないこと（roadmap.md §1.1 の完了条件）を確認する。起動時の地色（`main.go` の `BackgroundColour` はテンプレート由来の直値であり、spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため本作業単位では変更しない）が `--color-surface-0` とずれて見える場合は、後続作業単位への申し送りとして観察結果に記録する。観察結果を `## Implementation Notes` へ記録する
     _Requirements: 2.9_
     _Boundary: Verification_
     _Depends: 1.2, 1.6, 2.2, 2.4, 2.6, 3.4, 3.5, 4.4, 4.5, 5.4, 5.5, 5.6_
     - 対象ファイル: `docs/specs/001-dashboard-mvp/001-dashboard-shell/tasks.md`(変更)
     - 仕様参照: spec.md §7 Requirement 2.9, §3 前提 2
     - 検証コマンド: `wails dev` を起動し、DevTools のコンソールで `let n=0; const off=window.runtime.EventsOn('nullops:log', b => { n += b.length }); setTimeout(() => { console.log(n); off() }, 30000)` を実行して 30 秒後の合計が 60 以上であることを確認する / ウィンドウを閉じた後に `pgrep -fl "build/bin/nullops"` が 0 件（`nullops` だけで検索すると作業ツリーのパスを含む Node のプロセスに当たるため、実行ファイルのパスで絞る）
-  - [ ] 6.2 検証手段の成立を通しで確認する。`go vet ./...`・`go test ./...`（1 件以上のテストが実行される）・`cd frontend && npm ci && npm run lint`・`wails build` がいずれも終了コード 0 で終わり、`build/bin` に起動できるアプリが生成されることを確認する。結果を `## Implementation Notes` へ記録する
+  - [x] 6.2 検証手段の成立を通しで確認する。`go vet ./...`・`go test ./...`（1 件以上のテストが実行される）・`cd frontend && npm ci && npm run lint`・`wails build` がいずれも終了コード 0 で終わり、`build/bin` に起動できるアプリが生成されることを確認する。結果を `## Implementation Notes` へ記録する
     _Requirements: 10.2, 10.3, 10.4, 10.5_
     _Boundary: Verification_
     _Depends: 6.1_
@@ -304,6 +304,21 @@
 - タスク 5.1 の検証コマンド `grep -rn "EventsOff" frontend/src` は**コメント中の語にも当たる**。`EventsOff` を使わない理由をコメントへ書くと 0 件にならないため、その API 名を書かずに理由だけを残した(「イベント名に紐づく全リスナーを外す側の API を使わない」)。
 - `frontend/wailsjs` は `.gitignore` 済みだが、`frontend/src/lib/feed.ts` はそこから型と関数を import する。したがって**チェックアウト直後に `npm run lint` / `npx tsc --noEmit` は通らない**。先に `wails build` か `wails generate module` でバインディングを生成すること。
 
+### 検証手段の成立(タスク 6.2 の結果)
+
+`go vet ./... && go test ./... && (cd frontend && npm ci && npm run lint) && wails build` を通しで実行し、終了コード 0 で完了した(2026-09-01)。
+
+| 検証コマンド | 結果 |
+| :- | :- |
+| `go vet ./...` | 指摘なし |
+| `go test -count=1 ./...` | `ok nullops` / `ok nullops/feed`。PASS したテスト 50 件 |
+| `npm ci` | 49 packages を追加して完了 |
+| `npm run lint`(Biome) | 12 ファイルを検査、指摘なし |
+| `wails build` | `build/bin/nullops.app` を生成(署名まで完了) |
+
+- `wails build` の後の `git status` はクリーンだった。`build/bin` / `frontend/dist` / `frontend/wailsjs` は `.gitignore` 済みで、Next.js による `tsconfig.json` / `AGENTS.md` / `CLAUDE.md` の自動書き換えも起きなかった。
+- 生成されたアプリを**起動しての目視は未実施**(下の未検証項目を参照)。
+
 ### 未検証項目(人間が確認すべきこと)
 
 - **タスク 1.5**(受け入れ基準 1.1 の見え方・8.3・8.4)。`wails dev` を起動し、次を目視する。(1) 6 枠が 3 列 × 2 行に並び、見出しが 1 行目 左から `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左から `Dependency Graph` / `Utilization` / `Scatter 3D` であること。(2) 各枠の中身の位置に `pending` が出ていること。(3) ロゴ画像・名前入力欄・Greet ボタンが無いこと。(4) ウィンドウを最大化・縮小しても 6 枠が表示領域に追随し、ページ全体に縦横どちらのスクロールバーも出ないこと。
@@ -324,3 +339,10 @@
   - 本文は折り返す(`whitespace-pre-wrap break-all`)。長い行で枠へ横スクロールを出さないためであり、折り返した 2 行目以降も本文列の左端に揃う。
 - **タスク 5.6**(受け入れ基準 3.6)。tasks.md の検証コマンドは `loadSnapshot` を一時的に reject させる操作を求めるが、**この操作は実行していない**(承認済みの方針: 画面を目視できない環境で、元へ戻し忘れる危険だけが残るため)。人間が確認する場合は `frontend/src/lib/feed.ts` の `loadSnapshot` を一時的に `Promise.reject(new Error('test'))` を返す実装へ差し替え、`wails dev` で (1) 画面が 0 行で始まり以後の差分で埋まること、(2) 枠にエラー表示が出ないこと、(3) DevTools のコンソールにだけ「初期スナップショットの取得に失敗した。0 行で開始する」が出ることを確かめ、**必ず元へ戻す**こと。
   - 静的には満たしている: `loadSnapshot()` の `.catch` が `console.error` のみを行い、`lines` の初期値 `[]` のまま購読を続ける。
+- **タスク 6.1**(受け入れ基準 2.9、spec.md §3 前提 2、roadmap.md §1.1 の完了条件)。`wails dev` を起動し、次を確認する。
+  1. DevTools のコンソールで `let n=0; const off=window.runtime.EventsOn('nullops:log', b => { n += b.length }); setTimeout(() => { console.log(n); off() }, 30000)` を実行し、30 秒後の合計が 60 以上であること。
+  2. 1440 × 900 で 6 枠の見出しと中身が読めること。
+  3. ウィンドウを閉じた後に `pgrep -fl "build/bin/nullops"` が 0 件であること(`nullops` だけで検索すると作業ツリーのパスを含む Node のプロセスに当たる)。
+  4. 起動時の地色が `--color-surface-0`(`#10141c`)とずれて見えるか。`main.go` の `BackgroundColour` はテンプレート由来の直値 `RGBA{27, 38, 54}` のままであり(spec.md §6.5 が `main.go` の変更を `OnShutdown` と寸法に限るため本作業単位では変更しない)、起動直後のわずかな時間だけ別の色が見える可能性がある。見えた場合は後続の作業単位への申し送りとする。
+  - **流入量(1 の 60 行以上)は計算で満たすことが分かっている**: 送出間隔は `logMinInterval` 80 ミリ秒〜`logMaxInterval` 400 ミリ秒であり、最悪(つねに 400 ミリ秒)でも 30 秒で 75 行、平均(240 ミリ秒)なら約 125 行になる。停止しないことは `feed.Runner` が context のキャンセルまで回り続ける実装と、その振る舞いを固定した `feed/runner_test.go` で担保している。目視で確かめるのは「実際に画面へ流れ続けるか」である。
+- **タスク 6.2 の目視部分**。`build/bin/nullops.app` を起動し、6 枠が並ぶことと `Log Stream` へログが流入し続けることを確認する。

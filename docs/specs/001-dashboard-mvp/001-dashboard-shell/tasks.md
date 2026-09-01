@@ -177,7 +177,7 @@
     - 対象ファイル: `app.go`(変更), `app_test.go`(変更)
     - 仕様参照: spec.md §6.5 `shutdown` の事後条件
     - 検証コマンド: `go vet ./... && go test -race ./...` / 復帰しない擬似 `Runner` で `shutdown` が 1 秒強で戻ること（無期限に待たないこと）を検査する
-  - [ ] 4.3 `DashboardSnapshot` と `App.Snapshot` を実装する。呼び出し時点で `logSource` が保持する全行を古い順に含め、0 件でも `null` にならない空配列を返し、呼び出しによって `logSource` と `scenario` の状態を変化させない
+  - [x] 4.3 `DashboardSnapshot` と `App.Snapshot` を実装する。呼び出し時点で `logSource` が保持する全行を古い順に含め、0 件でも `null` にならない空配列を返し、呼び出しによって `logSource` と `scenario` の状態を変化させない
     _Requirements: 3.2, 3.3, 3.4_
     _Boundary: App_
     _Depends: 4.1_

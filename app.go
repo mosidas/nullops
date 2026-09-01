@@ -106,6 +106,18 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
+// Snapshot は呼び出し時点のダッシュボードの内容を返す。
+//
+// 呼び出しによって logSource と scenario の状態は変化しない(spec.md §5.4)。
+// startup を経ずに呼ばれても error にせず空のスナップショットを返す。
+// バインディングは事前条件を持たない(いつ・何回呼んでもよい)ためである。
+func (a *App) Snapshot() DashboardSnapshot {
+	if a.logs == nil {
+		return DashboardSnapshot{Log: []LogLine{}}
+	}
+	return DashboardSnapshot{Log: a.logs.Snapshot()}
+}
+
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return "Hello " + name + ", It's show time!"

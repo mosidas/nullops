@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -179,5 +180,96 @@ func TestShutdownWithoutStartup(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * shutdownGrace):
 		t.Fatalf("startup を経ていない shutdown が戻らない")
+	}
+}
+
+// 4.3: Snapshot は 0 件でも null にならず、呼び出しで状態を変えない。
+
+func TestSnapshotEmptyMarshalsToEmptyArray(t *testing.T) {
+	a, _ := newTestApp()
+	a.logs = newLogSource(4, newSeededRand(), newScenario(time.Second, time.Second, newSeededRand(), time.Now))
+
+	b, err := json.Marshal(a.Snapshot())
+	if err != nil {
+		t.Fatalf("json.Marshal が失敗した: %v", err)
+	}
+	if got, want := string(b), `{"log":[]}`; got != want {
+		t.Errorf("0 件のスナップショットの JSON = %s, 期待 %s", got, want)
+	}
+}
+
+func TestSnapshotWithoutStartupIsEmpty(t *testing.T) {
+	// バインディングは事前条件を持たないため、startup 前の呼び出しでも落ちてはならない。
+	a := NewApp()
+
+	got := a.Snapshot()
+	if got.Log == nil {
+		t.Fatal("startup 前の Snapshot().Log が nil。空配列でなければならない")
+	}
+	if len(got.Log) != 0 {
+		t.Errorf("startup 前の Snapshot().Log の件数 = %d, 期待 0", len(got.Log))
+	}
+}
+
+func TestSnapshotReturnsAllLinesOldestFirst(t *testing.T) {
+	a, _ := newTestApp()
+	a.logs = newLogSource(8, newSeededRand(), newScenario(time.Second, time.Second, newSeededRand(), time.Now))
+	for range 3 {
+		a.logs.Next()
+	}
+
+	got := a.Snapshot().Log
+	if len(got) != 3 {
+		t.Fatalf("Snapshot().Log の件数 = %d, 期待 3", len(got))
+	}
+	for i, line := range got {
+		if want := uint64(i + 1); line.Seq != want {
+			t.Errorf("Snapshot().Log[%d].Seq = %d, 期待 %d(古い順)", i, line.Seq, want)
+		}
+	}
+}
+
+func TestSnapshotHasNoSideEffect(t *testing.T) {
+	// フェーズを進めるには minHold 以上の経過が要る。now を固定して
+	// 「時間が経っていないのに進んだ」場合だけを検出する。
+	now := time.Now()
+	sc := newScenario(time.Second, time.Second, newSeededRand(), func() time.Time { return now })
+
+	a, _ := newTestApp()
+	a.logs = newLogSource(8, newSeededRand(), sc)
+	for range 3 {
+		a.logs.Next()
+	}
+
+	before := a.Snapshot()
+	phaseBefore := sc.Current()
+
+	for range 5 {
+		a.Snapshot()
+	}
+
+	after := a.Snapshot()
+	if len(after.Log) != len(before.Log) {
+		t.Errorf("連続呼び出し後の件数 = %d, 期待 %d(Snapshot は行を増やさない)", len(after.Log), len(before.Log))
+	}
+	if after.Log[len(after.Log)-1].Seq != before.Log[len(before.Log)-1].Seq {
+		t.Errorf("連続呼び出しで Seq の最大値が %d から %d へ変化した",
+			before.Log[len(before.Log)-1].Seq, after.Log[len(after.Log)-1].Seq)
+	}
+	if got := sc.Current(); got != phaseBefore {
+		t.Errorf("連続呼び出しで scenario.Current() が %q から %q へ変化した", phaseBefore, got)
+	}
+}
+
+func TestSnapshotIsCopy(t *testing.T) {
+	a, _ := newTestApp()
+	a.logs = newLogSource(8, newSeededRand(), newScenario(time.Second, time.Second, newSeededRand(), time.Now))
+	a.logs.Next()
+
+	got := a.Snapshot()
+	got.Log[0].Text = "書き換え"
+
+	if again := a.Snapshot(); again.Log[0].Text == "書き換え" {
+		t.Error("戻り値への変更が内部へ波及した。Snapshot は別の配列を返さなければならない")
 	}
 }

@@ -59,14 +59,14 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 ## タスク一覧
 
 - [ ] 1. Go 側のコミット履歴の契約と生成器
-  - [ ] 1.1 `Commit` の型と不変条件の強制を作る
+  - [x] 1.1 `Commit` の型と不変条件の強制を作る
     _Requirements: 2.1, 2.2, 2.3, 2.6_
     _Boundary: Commit_
     _Interfaces: Produces `Commit{Seq uint64; ID string; Lane int; Parents []uint64; Branch, Summary string}` / `newCommit(seq uint64, id string, lane int, parents []uint64, branch, summary string) (Commit, error)` / `errCommitSeqZero` / `errCommitIDFormat` / `errCommitLaneRange` / `errCommitParents` / `errCommitTextEmpty` / `errCommitTextNewline` / `commitMaxLanes = 4`_
     - 対象ファイル: `commit.go`(新規), `commit_test.go`(新規)
     - 仕様参照: spec.md §6.1 `Commit`, §7 Requirement 2
     - 検証コマンド: `go vet ./...`, `go test ./...`
-  - [ ] 1.2 `commitSource` を作り `feed.Source` を構造的に満たす
+  - [x] 1.2 `commitSource` を作り `feed.Source` を構造的に満たす
     _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 12.2_
     _Boundary: commitSource_
     _Depends: 1.1_
@@ -222,4 +222,5 @@ spec.md §7 の全受け入れ基準が、いずれかのタスクから参照�
 
 | サブタスク | コミット |
 | :- | :- |
-| (未着手) | — |
+| 1.1 `Commit` の型と不変条件の強制 | `038e9c6` |
+| 1.2 `commitSource` | `2974523` |

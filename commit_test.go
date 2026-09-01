@@ -32,11 +32,11 @@ func TestNewCommitIDFormat(t *testing.T) {
 		id      string
 		wantErr bool
 	}{
-		"7 桁の小文字 16 進":  {id: "0f9e8d7", wantErr: false},
-		"数字のみ":          {id: "0123456", wantErr: false},
-		"6 桁":           {id: "0f9e8d", wantErr: true},
-		"8 桁":           {id: "0f9e8d7c", wantErr: true},
-		"空文字":           {id: "", wantErr: true},
+		"7 桁の小文字 16 進": {id: "0f9e8d7", wantErr: false},
+		"数字のみ":         {id: "0123456", wantErr: false},
+		"6 桁":          {id: "0f9e8d", wantErr: true},
+		"8 桁":          {id: "0f9e8d7c", wantErr: true},
+		"空文字":          {id: "", wantErr: true},
 		"大文字を含む":       {id: "0F9E8D7", wantErr: true},
 		"16 進でない文字を含む": {id: "0f9e8dz", wantErr: true},
 	}
@@ -114,14 +114,14 @@ func TestNewCommitParentsInvariant(t *testing.T) {
 		parents []uint64
 		wantErr bool
 	}{
-		"根は親なし":         {seq: 1, parents: nil, wantErr: false},
-		"親 1 つ":         {seq: 5, parents: []uint64{4}, wantErr: false},
-		"親 2 つ(マージ)":    {seq: 5, parents: []uint64{4, 2}, wantErr: false},
-		"親 3 つ":         {seq: 5, parents: []uint64{4, 3, 2}, wantErr: true},
-		"親に 0 を含む":      {seq: 5, parents: []uint64{0}, wantErr: true},
-		"親が自身と同じ":       {seq: 5, parents: []uint64{5}, wantErr: true},
-		"親が自身より大きい":     {seq: 5, parents: []uint64{6}, wantErr: true},
-		"親が重複":          {seq: 5, parents: []uint64{4, 4}, wantErr: true},
+		"根は親なし":        {seq: 1, parents: nil, wantErr: false},
+		"親 1 つ":        {seq: 5, parents: []uint64{4}, wantErr: false},
+		"親 2 つ(マージ)":   {seq: 5, parents: []uint64{4, 2}, wantErr: false},
+		"親 3 つ":        {seq: 5, parents: []uint64{4, 3, 2}, wantErr: true},
+		"親に 0 を含む":     {seq: 5, parents: []uint64{0}, wantErr: true},
+		"親が自身と同じ":      {seq: 5, parents: []uint64{5}, wantErr: true},
+		"親が自身より大きい":    {seq: 5, parents: []uint64{6}, wantErr: true},
+		"親が重複":         {seq: 5, parents: []uint64{4, 4}, wantErr: true},
 		"根でないのに親が 0 個": {seq: 2, parents: []uint64{}, wantErr: true},
 	}
 

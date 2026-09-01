@@ -147,7 +147,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`, `grep -rn '#[0-9a-fA-F]\{3,8\}' --include="*.ts" --include="*.tsx" frontend/src`(色の直値が無いこと)
 
 - [ ] 6. `DependencyGraphPanel` の描画
-  - [ ] 6.1 パネルの骨格・購読とスナップショットの併合・寸法追随を作る
+  - [x] 6.1 パネルの骨格・購読とスナップショットの併合・寸法追随を作る
     _Requirements: 8.1, 8.3, 8.4, 8.5, 11.1, 11.2, 11.3, 11.7_
     _Boundary: DependencyGraphPanel_
     _Depends: 4.1_

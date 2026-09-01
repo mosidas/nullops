@@ -84,7 +84,7 @@
     - 仕様参照: spec.md §5.7 `DashboardGrid` のエラー
     - 検証コマンド: `cd frontend && npm run lint` / `wails dev` で `page.tsx` の枠を一時的に 5 個へ減らし、DevTools のコンソールに `console.error` が 1 回だけ出て 5 枠が描画されることを確認したうえで 6 個へ戻す（6 個のときはコンソールに出力が無いことも確認する）
 
-- [ ] 2. (P) ログ行の型・フェーズ巡回・ログ生成器（Go / main パッケージ）
+- [x] 2. (P) ログ行の型・フェーズ巡回・ログ生成器（Go / main パッケージ）
   - [x] 2.1 `Level` / `Phase` / `LogLine` と、不変条件を満たす値だけを作る非公開の完全コンストラクタを実装する（正常系）。このタスクでリポジトリ最初の Go テストを成立させる
     _Requirements: 4.2, 4.3, 10.2, 10.3_
     _Boundary: LogLine_
@@ -118,7 +118,7 @@
     - 対象ファイル: `logsource.go`(新規), `logsource_test.go`(新規)
     - 仕様参照: spec.md §6.3, §5.1
     - 検証コマンド: `go vet ./... && go test -race ./...` / 候補集合の全要素が spec.md §6.1 の不変条件（1 文字以上・改行なし・ASCII の英語）を満たすことをテストで走査し、フェーズごとに候補集合が異なることを検査する
-  - [ ] 2.6 `logSource` のリングバッファを実装する。保持上限は `newLogSource` の `capacity` 引数で受け（500 を渡すのはタスク 4.1）、上限に達した状態で次の行を生成したときは最古の 1 行を捨てる。`Snapshot()` は保持している全行を古い順に、内部と別の配列で返す
+  - [x] 2.6 `logSource` のリングバッファを実装する。保持上限は `newLogSource` の `capacity` 引数で受け（500 を渡すのはタスク 4.1）、上限に達した状態で次の行を生成したときは最古の 1 行を捨てる。`Snapshot()` は保持している全行を古い順に、内部と別の配列で返す
     _Requirements: 2.3, 2.4_
     _Boundary: LogSource_
     _Depends: 2.5_

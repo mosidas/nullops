@@ -237,3 +237,96 @@ func TestNewLogSourcePreconditionViolation(t *testing.T) {
 		})
 	}
 }
+
+func TestLogSourceSnapshotIsEmptyBeforeNext(t *testing.T) {
+	s := newTestLogSource(t, 5)
+
+	got := s.Snapshot()
+	if got == nil {
+		t.Fatalf("Snapshot が nil を返した")
+	}
+	if len(got) != 0 {
+		t.Errorf("Next を呼ぶ前の Snapshot が空でない: got %d 件", len(got))
+	}
+}
+
+func TestLogSourceSnapshotKeepsInsertionOrder(t *testing.T) {
+	const capacity = 5
+	s := newTestLogSource(t, capacity)
+
+	for range 3 {
+		nextLine(t, s)
+	}
+
+	got := s.Snapshot()
+	if len(got) != 3 {
+		t.Fatalf("保持件数が一致しない: got %d, want 3", len(got))
+	}
+	for i, line := range got {
+		if want := uint64(i + 1); line.Seq != want {
+			t.Errorf("%d 番目の Seq が古い順に並んでいない: got %d, want %d", i, line.Seq, want)
+		}
+	}
+}
+
+func TestLogSourceDropsOldestBeyondCapacity(t *testing.T) {
+	const capacity = 5
+	s := newTestLogSource(t, capacity)
+
+	// 上限をひと巡り以上超えて生成し、最古の行から捨てられることを確かめる。
+	const generated = capacity*2 + 3
+	for range generated {
+		nextLine(t, s)
+	}
+
+	got := s.Snapshot()
+	if len(got) != capacity {
+		t.Fatalf("保持件数が上限を超えた: got %d, want %d", len(got), capacity)
+	}
+	for i, line := range got {
+		if want := uint64(generated - capacity + i + 1); line.Seq != want {
+			t.Errorf("%d 番目の Seq が一致しない: got %d, want %d", i, line.Seq, want)
+		}
+	}
+}
+
+func TestLogSourceSnapshotIsCopy(t *testing.T) {
+	s := newTestLogSource(t, 5)
+	for range 3 {
+		nextLine(t, s)
+	}
+
+	first := s.Snapshot()
+	first[0].Text = "mutated"
+	first[0].Seq = 9999
+
+	second := s.Snapshot()
+	if second[0].Text == "mutated" || second[0].Seq == 9999 {
+		t.Errorf("Snapshot の変更が内部へ波及した: got %+v", second[0])
+	}
+}
+
+func TestLogSourceSnapshotIsConcurrencySafe(t *testing.T) {
+	s := newTestLogSource(t, 8)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for range 200 {
+			nextLine(t, s)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 200 {
+			for i, line := range s.Snapshot() {
+				if i > 0 && line.Seq == 0 {
+					t.Errorf("Snapshot が未初期化の行を返した: %+v", line)
+					return
+				}
+			}
+		}
+	}()
+	wg.Wait()
+}

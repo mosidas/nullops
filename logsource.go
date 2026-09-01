@@ -89,6 +89,13 @@ type logSource struct {
 	mu  sync.Mutex
 	seq uint64
 
+	// 保持する行のリングバッファ。長さ capacity の固定長で確保し、
+	// 上限に達した後は最古の位置を上書きする。先頭を捨てるスライス操作
+	// (buf = buf[1:]) にしないのは、下地の配列が伸び続けるため。
+	buf   []LogLine
+	start int // 最古の行の位置
+	count int // 保持件数
+
 	capacity int
 	rnd      *rand.Rand
 	sc       *scenario
@@ -111,7 +118,12 @@ func newLogSource(capacity int, rnd *rand.Rand, sc *scenario) *logSource {
 		panic("newLogSource の sc は nil であってはならない")
 	}
 
-	return &logSource{capacity: capacity, rnd: rnd, sc: sc}
+	return &logSource{
+		buf:      make([]LogLine, capacity),
+		capacity: capacity,
+		rnd:      rnd,
+		sc:       sc,
+	}
 }
 
 // EventName はフロントエンドへ送るイベント名を返す。プロセスの生存期間中つねに同じ値。
@@ -147,5 +159,34 @@ func (s *logSource) Next() any {
 		panic("logSource の候補集合が LogLine の不変条件を破っている: " + err.Error())
 	}
 
+	s.push(line)
 	return []LogLine{line}
+}
+
+// push は 1 行をリングバッファへ積む。上限に達していれば最古の 1 行を捨てる。
+// 呼び出し側で mu を保持すること。
+func (s *logSource) push(line LogLine) {
+	if s.count == s.capacity {
+		s.buf[s.start] = line
+		s.start = (s.start + 1) % s.capacity
+		return
+	}
+	s.buf[(s.start+s.count)%s.capacity] = line
+	s.count++
+}
+
+// Snapshot は保持している全行を古い順に返す。
+//
+// 返すスライスは内部と別の配列であり、呼び出し側の変更は内部へ波及しない。
+// 0 件でも nil でなく長さ 0 のスライスを返す（バインディング経由で JSON 化したとき
+// null にしないため。spec.md §6.2）。
+func (s *logSource) Snapshot() []LogLine {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]LogLine, s.count)
+	for i := range s.count {
+		out[i] = s.buf[(s.start+i)%s.capacity]
+	}
+	return out
 }

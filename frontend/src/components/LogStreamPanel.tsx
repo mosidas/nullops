@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { main } from '../../wailsjs/go/models';
 import { loadSnapshot, subscribeLog } from '../lib/feed';
 
@@ -34,6 +34,11 @@ function compareSeq(a: main.LogLine, b: main.LogLine): number {
   return a.seq - b.seq;
 }
 
+// 下端から何ピクセル以内なら「追従中」と見なすか（spec.md §7 Requirement 2.7）。
+// 0 にしないのは、行の高さの端数やズーム倍率で scrollTop が下端ちょうどに
+// ならないことがあり、追従が外れて止まって見えるため。
+const FOLLOW_THRESHOLD_PX = 16;
+
 // map へ毎回新しい関数を渡さないため、モジュールの定数として持つ
 // （CLAUDE.md TypeScript 規約。行の追加は 1 秒に数回起きる）。
 function renderLine(line: main.LogLine): React.JSX.Element {
@@ -47,6 +52,10 @@ function renderLine(line: main.LogLine): React.JSX.Element {
 /** 擬似ログの流れを表示する。マウント中だけ購読する。 */
 export function LogStreamPanel(): React.JSX.Element {
   const [lines, setLines] = useState<main.LogLine[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // 追従するかどうかは描画に影響しないため state にしない。state にすると
+  // スクロールのたびに再描画が起き、行の追加より高い頻度で走る。
+  const followingRef = useRef(true);
 
   useEffect(() => {
     // スナップショットより先に購読を始めるのは、取得中に届いた行を落とさないため。
@@ -62,5 +71,34 @@ export function LogStreamPanel(): React.JSX.Element {
     return unsubscribe;
   }, []);
 
-  return <ol>{lines.map(renderLine)}</ol>;
+  // 依存に lines.length ではなく末尾の Seq を使うのは、表示が上限の 300 行に達すると
+  // 行が増えても length が変わらなくなり、そこから追従が止まるため。
+  const lastSeq = lines.length === 0 ? 0 : lines[lines.length - 1].seq;
+
+  // 行が増えた後の描画で位置を合わせる。useEffect ではなく useLayoutEffect を使うのは、
+  // 描画後・ブラウザの描画前に scrollTop を書き、追従が 1 フレーム遅れて見えるのを避けるため。
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el === null || lastSeq === 0 || !followingRef.current) {
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }, [lastSeq]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (el === null) {
+      return;
+    }
+    // 追従の再開も同じ判定で行う。下端付近まで戻せば自動で追従へ戻る。
+    followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_THRESHOLD_PX;
+  }, []);
+
+  return (
+    // 枠の内側だけを縦にスクロールさせる。高さを枠いっぱいに固定するため、
+    // Panel 側のスクロール領域は溢れず、ページ全体にはスクロールバーが出ない。
+    <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto">
+      <ol>{lines.map(renderLine)}</ol>
+    </div>
+  );
 }

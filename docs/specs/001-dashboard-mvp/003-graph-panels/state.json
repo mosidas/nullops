@@ -1,7 +1,7 @@
 {
   "workflow": "sdd",
   "unit": "graph-panels",
-  "state": "implementing",
+  "state": "completed",
   "approvals": {
     "spec": true,
     "tasks": true

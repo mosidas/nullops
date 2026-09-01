@@ -193,7 +193,8 @@ func TestSnapshotEmptyMarshalsToEmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal が失敗した: %v", err)
 	}
-	if got, want := string(b), `{"log":[],"scatter":{"seq":0,"points":[]}}`; got != want {
+	want := `{"log":[],"scatter":{"seq":0,"points":[]},"commits":[],"graph":{"seq":0,"nodes":[],"edges":[]}}`
+	if got := string(b); got != want {
 		t.Errorf("0 件のスナップショットの JSON = %s, 期待 %s", got, want)
 	}
 }
@@ -349,5 +350,109 @@ func TestStartupUsesSpecifiedParameters(t *testing.T) {
 	}
 	if appMaxHold != 45*time.Second {
 		t.Errorf("maxHold が一致しない: got %v, want 45s", appMaxHold)
+	}
+}
+
+// 受け入れ基準 7.1・7.2: startup を経ない Snapshot も nil を返さず、
+// Commits が 0 件・Graph が Seq 0 の空グラフになる。
+func TestSnapshotWithoutStartupHasEmptyGraphPanels(t *testing.T) {
+	a := NewApp()
+
+	got := a.Snapshot()
+	if got.Commits == nil {
+		t.Fatal("startup 前の Snapshot().Commits が nil。空配列でなければならない")
+	}
+	if len(got.Commits) != 0 {
+		t.Errorf("startup 前の Snapshot().Commits の件数 = %d, 期待 0", len(got.Commits))
+	}
+	if got.Graph.Nodes == nil || got.Graph.Edges == nil {
+		t.Fatal("startup 前の Snapshot().Graph の Nodes / Edges が nil。空配列でなければならない")
+	}
+	if len(got.Graph.Nodes) != 0 || len(got.Graph.Edges) != 0 {
+		t.Errorf("startup 前の Snapshot().Graph の件数 = (%d, %d), 期待 (0, 0)",
+			len(got.Graph.Nodes), len(got.Graph.Edges))
+	}
+	if got.Graph.Seq != 0 {
+		t.Errorf("startup 前の Snapshot().Graph.Seq = %d, 期待 0", got.Graph.Seq)
+	}
+}
+
+// 受け入れ基準 7.4: startup の後の Snapshot はノードの揃ったグラフを返す。
+func TestSnapshotAfterStartupHasGraphNodes(t *testing.T) {
+	a, _ := newTestApp()
+	a.graph = newGraphSource(newSeededRand())
+
+	got := a.Snapshot()
+	if len(got.Graph.Nodes) != graphNodeCount {
+		t.Errorf("Snapshot().Graph.Nodes の件数 = %d, 期待 %d", len(got.Graph.Nodes), graphNodeCount)
+	}
+	if len(got.Graph.Edges) < len(graphCoreEdges) {
+		t.Errorf("Snapshot().Graph.Edges の本数 = %d, 基幹エッジ %d 本を下回る",
+			len(got.Graph.Edges), len(graphCoreEdges))
+	}
+}
+
+// 受け入れ基準 7.3: Snapshot は commitSource と graphSource の内部状態を変えない。
+func TestSnapshotDoesNotAdvanceGraphPanels(t *testing.T) {
+	a, _ := newTestApp()
+	a.commits = newCommitSource(appCommitCapacity, newSeededRand())
+	a.graph = newGraphSource(newSeededRand())
+	for range 3 {
+		a.commits.Next()
+		a.graph.Next()
+	}
+
+	before := a.Snapshot()
+	for range 5 {
+		a.Snapshot()
+	}
+	after := a.Snapshot()
+
+	if len(before.Commits) != len(after.Commits) {
+		t.Errorf("Snapshot がコミットの件数を変えた: %d → %d", len(before.Commits), len(after.Commits))
+	}
+	if before.Graph.Seq != after.Graph.Seq {
+		t.Errorf("Snapshot が Graph.Seq を進めた: %d → %d", before.Graph.Seq, after.Graph.Seq)
+	}
+	for i := range before.Graph.Nodes {
+		if before.Graph.Nodes[i] != after.Graph.Nodes[i] {
+			t.Fatalf("Snapshot がノード %d を動かした: %+v → %+v", i, before.Graph.Nodes[i], after.Graph.Nodes[i])
+		}
+	}
+}
+
+// 受け入れ基準 7.1: Snapshot が返すコミットは古い順で、内部と別の配列である。
+func TestSnapshotCommitsAreOldestFirstCopy(t *testing.T) {
+	a, _ := newTestApp()
+	a.commits = newCommitSource(appCommitCapacity, newSeededRand())
+	for range 4 {
+		a.commits.Next()
+	}
+
+	got := a.Snapshot().Commits
+	if len(got) != 4 {
+		t.Fatalf("Snapshot().Commits の件数 = %d, 期待 4", len(got))
+	}
+	for i, c := range got {
+		if c.Seq != uint64(i+1) {
+			t.Errorf("Snapshot().Commits[%d].Seq = %d, 期待 %d(古い順)", i, c.Seq, i+1)
+		}
+	}
+
+	got[0].Summary = "書き換え"
+	if again := a.Snapshot().Commits; again[0].Summary == "書き換え" {
+		t.Error("Snapshot が内部の配列を共有している")
+	}
+}
+
+// 受け入れ基準 12.1: 生成器の結線値を固定する。
+//
+// commitSource / graphSource 自体のテストは小さい値で回すため、ここでしか守れない。
+func TestStartupUsesSpecifiedGraphPanelParameters(t *testing.T) {
+	if appCommitCapacity != 120 {
+		t.Errorf("コミットの保持上限が一致しない: got %d, want 120", appCommitCapacity)
+	}
+	if graphNodeCount != 10 {
+		t.Errorf("ノード数が一致しない: got %d, want 10", graphNodeCount)
 	}
 }

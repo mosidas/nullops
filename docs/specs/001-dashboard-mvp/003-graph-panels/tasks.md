@@ -92,8 +92,8 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 仕様参照: spec.md §5.2 `graphSource`, §6.6 内部状態, §7 Requirement 4・5.5・5.6・6
     - 検証コマンド: `go vet ./...`, `go test ./...`, `go test -race ./...`
 
-- [ ] 3. `App` への配線
-  - [ ] 3.1 2 つの生成器を `App` へ配線し `Snapshot` に載せる
+- [x] 3. `App` への配線
+  - [x] 3.1 2 つの生成器を `App` へ配線し `Snapshot` に載せる
     _Requirements: 7.1, 7.2, 7.3, 7.4, 12.1_
     _Boundary: App_
     _Depends: 1.2, 2.2_
@@ -226,3 +226,4 @@ spec.md §7 の全受け入れ基準が、いずれかのタスクから参照�
 | 1.2 `commitSource` | `d8509e7` |
 | 2.1 グラフの型と不変条件の強制 | `8f825e5` |
 | 2.2 `graphSource` | `83aabe5` |
+| 3.1 `App` への配線 | `a7d8460` |

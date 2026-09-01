@@ -10,4 +10,8 @@ type DashboardSnapshot struct {
 	Log []LogLine `json:"log"`
 	// Scatter は 3D 散布図の点群。Points は nil にならない(同上)。
 	Scatter ScatterCloud `json:"scatter"`
+	// Commits は古い順の擬似コミット履歴。nil にならない(同上)。
+	Commits []Commit `json:"commits"`
+	// Graph は擬似依存関係。Nodes・Edges は nil にならない(同上)。
+	Graph DependencyGraph `json:"graph"`
 }

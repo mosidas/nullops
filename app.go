@@ -28,6 +28,8 @@ type App struct {
 
 	logs    *logSource
 	scatter *scatterSource
+	commits *commitSource
+	graph   *graphSource
 
 	// newEmitter は送信先の Emitter を作る。
 	//
@@ -49,12 +51,14 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// scenario・logSource・scatterSource は別々の mutex で自身を守るため、*rand.Rand を共有しない。
+	// scenario と各生成器は別々の mutex で自身を守るため、*rand.Rand を共有しない。
 	sc := newScenario(appMinHold, appMaxHold, newSeededRand(), time.Now)
 	a.logs = newLogSource(appLogCapacity, newSeededRand(), sc)
 	a.scatter = newScatterSource(scatterPointCount, newSeededRand())
+	a.commits = newCommitSource(appCommitCapacity, newSeededRand())
+	a.graph = newGraphSource(newSeededRand())
 
-	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs, a.scatter)
+	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs, a.scatter, a.commits, a.graph)
 	if err != nil {
 		// 事前条件はこの呼び出し位置で静的に満たされる。到達はプログラマの誤り。
 		panic("feed.NewRunner の事前条件を満たしていない: " + err.Error())
@@ -122,12 +126,20 @@ func (a *App) Snapshot() DashboardSnapshot {
 	snapshot := DashboardSnapshot{
 		Log:     []LogLine{},
 		Scatter: ScatterCloud{Points: []ScatterPoint{}},
+		Commits: []Commit{},
+		Graph:   DependencyGraph{Nodes: []GraphNode{}, Edges: []GraphEdge{}},
 	}
 	if a.logs != nil {
 		snapshot.Log = a.logs.Snapshot()
 	}
 	if a.scatter != nil {
 		snapshot.Scatter = a.scatter.Snapshot()
+	}
+	if a.commits != nil {
+		snapshot.Commits = a.commits.Snapshot()
+	}
+	if a.graph != nil {
+		snapshot.Graph = a.graph.Snapshot()
 	}
 	return snapshot
 }

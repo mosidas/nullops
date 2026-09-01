@@ -207,7 +207,7 @@
     - 対象ファイル: `frontend/src/lib/feed.ts`(新規)
     - 仕様参照: spec.md §5.6, §5.5「購読の解除には `EventsOn` の戻り値を使う」
     - 検証コマンド: `cd frontend && npm run lint` / `grep -rn "EventsOff" frontend/src` が 0 件 / `grep -n "LogLine\|DashboardSnapshot" frontend/wailsjs/go/models.ts` が両方とも 1 件以上（バインディング生成物に型が出ていることの確認）
-  - [ ] 5.2 `LogStreamPanel` を実装し、`page.tsx` の `Log Stream` 枠のプレースホルダを差し替える。マウント時に `nullops:log` の購読を開始した後に `Snapshot()` を 1 回呼び、スナップショットの行と購読開始後に受信済みの行を `Seq` の昇順で併合して同一 `Seq` を 1 行だけ残す。アンマウント時は 5.1 が返した解除関数を呼ぶ
+  - [x] 5.2 `LogStreamPanel` を実装し、`page.tsx` の `Log Stream` 枠のプレースホルダを差し替える。マウント時に `nullops:log` の購読を開始した後に `Snapshot()` を 1 回呼び、スナップショットの行と購読開始後に受信済みの行を `Seq` の昇順で併合して同一 `Seq` を 1 行だけ残す。アンマウント時は 5.1 が返した解除関数を呼ぶ
     _Requirements: 2.8, 3.1, 3.5_
     _Boundary: LogStreamPanel_
     _Depends: 5.1, 1.5_
@@ -312,3 +312,5 @@
 - **タスク 4.5**(受け入れ基準 8.1・8.2)。`wails dev` を起動し、DevTools のコンソールで `console.log(window.outerWidth, window.outerHeight)` が `1440 900` を示すこと、ウィンドウを手で縮めても同じ値が `1100 720` を下回らないことを確認する。
   - 静的には満たしている: `main.go` の `options.App` に `Width: 1440` / `Height: 900` / `MinWidth: 1100` / `MinHeight: 720` を設定済み。`go vet ./...` と `go test ./...` は通る。
   - 注意: `window.outerWidth` はウィンドウ全体、`innerWidth` は WebView の内側を指す。macOS ではタイトルバーの分だけ `outerHeight` が `innerHeight` より大きくなるため、900 と比べるのは `outerHeight` の方である。
+- **タスク 5.2**(受け入れ基準 3.1・3.5)。`wails dev` を起動し、DevTools で次を確認する。(1) 起動直後に `Log Stream` 枠へ行が表示されること。(2) `$$('#__next li')` などで拾った行の `Seq` に重複と欠落が無いこと(Seq は連番なので `key` の並びが 1 ずつ増えることを見る)。
+  - 静的には満たしている: 購読を先に開始してから `loadSnapshot()` を呼び、`Seq` を鍵にした `Map` で重複を落として昇順に並べている。取得中に届いた行も `setLines` の関数形で保持される。

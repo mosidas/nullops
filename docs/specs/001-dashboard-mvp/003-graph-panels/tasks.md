@@ -165,7 +165,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`, `cd frontend && npx tsc --noEmit`, `grep -rn '#[0-9a-fA-F]\{3,8\}' --include="*.ts" --include="*.tsx" frontend/src`(色の直値が無いこと)
 
 - [ ] 7. 画面への接続と検証手段の成立
-  - [ ] 7.1 `page.tsx` の 2 枠を各パネルへ差し替える
+  - [x] 7.1 `page.tsx` の 2 枠を各パネルへ差し替える
     _Requirements: 12.1, 12.4_
     _Boundary: page_
     _Depends: 5.2, 6.2_

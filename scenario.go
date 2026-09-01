@@ -57,12 +57,15 @@ func newScenario(minHold, maxHold time.Duration, rnd *rand.Rand, now func() time
 //
 // 呼び出し時点で現在のフェーズの保持時間が経過していれば、
 // build → test → deploy → scan → build の順に進めてから返す。
+// 呼び出し間隔が保持時間より長く、2 つ以上のフェーズの保持時間が
+// 経過している場合は、経過した数だけ進める。
 // 複数のゴルーチンから安全に呼べる。
 func (s *scenario) Current() Phase {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.now().Before(s.holdEnds) {
+	// advance が期限を必ず minHold(> 0)以上進めるため、この繰り返しは有限で終わる。
+	for !s.now().Before(s.holdEnds) {
 		s.advance()
 	}
 	return s.phase

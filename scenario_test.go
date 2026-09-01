@@ -95,18 +95,49 @@ func TestScenarioAdvancesInOrder(t *testing.T) {
 	}
 }
 
-func TestScenarioAdvancesAtMostOneStepPerCall(t *testing.T) {
-	clk := newTestClock()
-	sc := newScenario(testMinHold, testMaxHold, newTestRand(), clk.now)
+func TestScenarioAdvancesMultipleStepsInOneCall(t *testing.T) {
+	// 保持時間を固定して、飛ばした時間から進む段数を決定的に決める。
+	const hold = testMinHold
 
-	if got := sc.Current(); got != PhaseBuild {
-		t.Fatalf("生成直後のフェーズが build でない: got %q", got)
+	tests := []struct {
+		name string
+		skip time.Duration
+		want Phase
+	}{
+		{name: "3 段分", skip: 3*hold + hold/2, want: PhaseScan},
+		{name: "1 巡を超える 6 段分", skip: 6*hold + hold/2, want: PhaseDeploy},
 	}
 
-	// 3 フェーズ分を超える時間を飛ばしても、1 回の呼び出しで進むのは 1 段。
-	clk.advance(4 * testMaxHold)
-	if got := sc.Current(); got != PhaseTest {
-		t.Fatalf("1 回の呼び出しで 1 段を超えて進んだ: got %q, want %q", got, PhaseTest)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clk := newTestClock()
+			sc := newScenario(hold, hold, newTestRand(), clk.now)
+
+			clk.advance(tt.skip)
+			if got := sc.Current(); got != tt.want {
+				t.Errorf("経過した数だけ進んでいない: got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestScenarioSkipMatchesStepwise(t *testing.T) {
+	// 保持時間が可変でも、1 回で飛ばした結果と細かく刻んだ結果は一致する。
+	const total = 4 * testMaxHold
+
+	stepwiseClk := newTestClock()
+	stepwise := newScenario(testMinHold, testMaxHold, newTestRand(), stepwiseClk.now)
+	for elapsed := time.Duration(0); elapsed < total; elapsed += testStep {
+		stepwiseClk.advance(testStep)
+		stepwise.Current()
+	}
+
+	skipClk := newTestClock()
+	skip := newScenario(testMinHold, testMaxHold, newTestRand(), skipClk.now)
+	skipClk.advance(stepwiseClk.now().Sub(testBase))
+
+	if got, want := skip.Current(), stepwise.Current(); got != want {
+		t.Errorf("一度に飛ばした結果が刻んだ結果と一致しない: got %q, want %q", got, want)
 	}
 }
 

@@ -191,7 +191,7 @@
     - 対象ファイル: `app.go`(変更)
     - 仕様参照: spec.md §5.4「削除する既存 API」
     - 検証コマンド: `grep -rn "Greet" frontend/src` が 0 件であることを確認してから削除し、`go vet ./... && go test ./...` / `wails build` 後に `grep -rn "Greet" frontend/wailsjs` が 0 件
-  - [ ] 4.5 `main.go` に `OnShutdown: app.shutdown` を結線し、ウィンドウの起動サイズを 1440 × 900、`MinWidth` を 1100、`MinHeight` を 720 に設定する
+  - [x] 4.5 `main.go` に `OnShutdown: app.shutdown` を結線し、ウィンドウの起動サイズを 1440 × 900、`MinWidth` を 1100、`MinHeight` を 720 に設定する
     _Requirements: 8.1, 8.2_
     _Boundary: App_
     _Depends: 4.2_
@@ -306,3 +306,6 @@
 - **タスク 1.5**(受け入れ基準 1.1 の見え方・8.3・8.4)。`wails dev` を起動し、次を目視する。(1) 6 枠が 3 列 × 2 行に並び、見出しが 1 行目 左から `Log Stream` / `Commit Graph` / `Timeseries`、2 行目 左から `Dependency Graph` / `Utilization` / `Scatter 3D` であること。(2) 各枠の中身の位置に `pending` が出ていること。(3) ロゴ画像・名前入力欄・Greet ボタンが無いこと。(4) ウィンドウを最大化・縮小しても 6 枠が表示領域に追随し、ページ全体に縦横どちらのスクロールバーも出ないこと。
   - 静的には満たしている: `DashboardGrid` が `h-dvh grid-cols-3 grid-rows-2 overflow-hidden`、`Panel` が `min-h-0 overflow-hidden`。見出し 6 文字列と並び順は spec.md §5.7 の表と一致(レビュー確認済み)。
 - **タスク 1.6** は隔離コピーでの実測で受け入れ基準 1.4 を確認済みのため、追加の人手確認は不要。ただし実リポジトリ上での目視は未実施。
+- **タスク 4.5**(受け入れ基準 8.1・8.2)。`wails dev` を起動し、DevTools のコンソールで `console.log(window.outerWidth, window.outerHeight)` が `1440 900` を示すこと、ウィンドウを手で縮めても同じ値が `1100 720` を下回らないことを確認する。
+  - 静的には満たしている: `main.go` の `options.App` に `Width: 1440` / `Height: 900` / `MinWidth: 1100` / `MinHeight: 720` を設定済み。`go vet ./...` と `go test ./...` は通る。
+  - 注意: `window.outerWidth` はウィンドウ全体、`innerWidth` は WebView の内側を指す。macOS ではタイトルバーの分だけ `outerHeight` が `innerHeight` より大きくなるため、900 と比べるのは `outerHeight` の方である。

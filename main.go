@@ -17,14 +17,20 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "nullops",
-		Width:  1024,
-		Height: 768,
+		Title: "nullops",
+		// 6 枠を 3 列 × 2 行で読める大きさ(spec.md §3 前提 2)。
+		Width:  1440,
+		Height: 900,
+		// 縮めても枠が潰れない下限(spec.md §8)。
+		MinWidth:  1100,
+		MinHeight: 720,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
+		// ウィンドウを閉じたときに擬似データの生成を止める(spec.md §6.5)。
+		OnShutdown: app.shutdown,
 		Bind: []interface{}{
 			app,
 		},

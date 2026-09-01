@@ -118,3 +118,66 @@ func TestStartupKeepsWailsContext(t *testing.T) {
 		t.Errorf("Wails の ctx を保持していない: got %v, want %v", a.ctx, want)
 	}
 }
+
+func TestShutdownStopsFeed(t *testing.T) {
+	a, em := newTestApp()
+	a.startup(context.Background())
+
+	waitFor(t, 5*time.Second, "送出の開始", func() bool { return len(em.snapshot()) >= 1 })
+
+	started := time.Now()
+	a.shutdown(context.Background())
+	elapsed := time.Since(started)
+
+	// Run が素直に復帰する分岐。待機の上限まで粘らない。
+	if elapsed >= shutdownGrace {
+		t.Errorf("Run の復帰を待ちすぎている: got %v, want %v 未満", elapsed, shutdownGrace)
+	}
+
+	select {
+	case <-a.done:
+	default:
+		t.Errorf("shutdown の復帰時点で Run が終わっていない")
+	}
+
+	after := len(em.snapshot())
+	time.Sleep(500 * time.Millisecond)
+	if got := len(em.snapshot()); got != after {
+		t.Errorf("shutdown の後に送出が増えた: got %d 件, want %d 件", got, after)
+	}
+}
+
+func TestShutdownGivesUpWaiting(t *testing.T) {
+	// 復帰しない Run を模す。done を閉じないことで待機の打ち切りを検査する。
+	a := NewApp()
+	a.done = make(chan struct{})
+	a.cancel = func() {}
+
+	started := time.Now()
+	a.shutdown(context.Background())
+	elapsed := time.Since(started)
+
+	if elapsed < shutdownGrace {
+		t.Errorf("待機の上限より早く戻った: got %v, want %v 以上", elapsed, shutdownGrace)
+	}
+	if elapsed > 2*shutdownGrace {
+		t.Errorf("待機を打ち切っていない: got %v, want %v 以下", elapsed, 2*shutdownGrace)
+	}
+}
+
+func TestShutdownWithoutStartup(t *testing.T) {
+	// OnStartup を経ずに呼ばれても止まらない（nil の done を待ち続けない）。
+	a := NewApp()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		a.shutdown(context.Background())
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * shutdownGrace):
+		t.Fatalf("startup を経ていない shutdown が戻らない")
+	}
+}

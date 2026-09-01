@@ -17,6 +17,9 @@ const (
 // appLogCapacity は保持するログ行の上限。
 const appLogCapacity = 500
 
+// shutdownGrace は終了時に Run の復帰を待つ上限。
+const shutdownGrace = time.Second
+
 // App はアプリのライフサイクルを持ち、Wails のバインディング対象になる。
 type App struct {
 	ctx    context.Context    // Wails の ctx。EventsEmit に渡す
@@ -84,9 +87,23 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	return false
 }
 
-// shutdown is called at application termination
+// shutdown はアプリの終了時に呼ばれ、擬似データの送出を止める。
+//
+// 自前の context をキャンセルし、Run の復帰を最大 shutdownGrace だけ待つ。
+// 待機に上限を設けるのは、生成器の不具合でウィンドウが閉じなくなる事態を避けるため。
+// 打ち切っても送出が残らないのは、Runner がキャンセル後に Emit を新たに
+// 開始しないと保証しているためである(spec.md §5.3)。
 func (a *App) shutdown(ctx context.Context) {
-	// Perform your teardown here
+	if a.cancel == nil {
+		// startup を経ずに呼ばれた場合。止めるものが無い。
+		return
+	}
+
+	a.cancel()
+	select {
+	case <-a.done:
+	case <-time.After(shutdownGrace):
+	}
 }
 
 // Greet returns a greeting for the given name

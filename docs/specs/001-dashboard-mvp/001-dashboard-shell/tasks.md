@@ -170,7 +170,7 @@
     - 対象ファイル: `emitter.go`(新規), `app.go`(変更), `app_test.go`(新規)
     - 仕様参照: spec.md §6.5, §5.2, §5.5, §6.4 minHold / maxHold
     - 検証コマンド: `go vet ./... && go test -race ./...` / Wails ランタイムを起動せずに検査できるよう `Emitter` を差し替えられる接合点を設け、擬似 `Emitter` に `nullops:log` のイベント名で `[]LogLine`（長さ 1）が届くことをテストで検査する
-  - [ ] 4.2 `shutdown` を実装する。自前の context をキャンセルし、`Run` の復帰を最大 1 秒待って戻る。1 秒以内に復帰する分岐と、復帰しないため待機を打ち切る分岐の両方に個別のテストケースを割り当てる
+  - [x] 4.2 `shutdown` を実装する。自前の context をキャンセルし、`Run` の復帰を最大 1 秒待って戻る。1 秒以内に復帰する分岐と、復帰しないため待機を打ち切る分岐の両方に個別のテストケースを割り当てる
     _Requirements: 7.3, 7.6_
     _Boundary: App_
     _Depends: 4.1_

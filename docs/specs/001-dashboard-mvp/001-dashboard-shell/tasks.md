@@ -98,7 +98,7 @@
     - 対象ファイル: `logline.go`(変更), `logline_test.go`(変更)
     - 仕様参照: spec.md §6.1 不変条件・完全コンストラクタ
     - 検証コマンド: `go vet ./... && go test ./...`
-  - [ ] 2.3 `scenario` を実装する。生成時のフェーズを `build` とし、最初の保持時間を `[minHold, maxHold]` の一様乱数で決める。`Current()` の呼び出し時に経過分だけ `build` → `test` → `deploy` → `scan` → `build` の順で進め、切り替えのたびに次の保持時間を同じ範囲の一様乱数で引き直す。専用のゴルーチンを起動せず、mutex で並行安全にする
+  - [x] 2.3 `scenario` を実装する。生成時のフェーズを `build` とし、最初の保持時間を `[minHold, maxHold]` の一様乱数で決める。`Current()` の呼び出し時に経過分だけ `build` → `test` → `deploy` → `scan` → `build` の順で進め、切り替えのたびに次の保持時間を同じ範囲の一様乱数で引き直す。専用のゴルーチンを起動せず、mutex で並行安全にする
     _Requirements: 5.1, 5.2, 5.3, 5.7_
     _Boundary: Scenario_
     - 対象ファイル: `scenario.go`(新規), `scenario_test.go`(新規)

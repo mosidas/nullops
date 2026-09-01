@@ -123,7 +123,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`, `grep -rn '#[0-9a-fA-F]\{3,8\}' --include="*.ts" --include="*.tsx" frontend/src`(色の直値が無いこと)
 
 - [ ] 4. 画面への接続と検証手段の成立
-  - [ ] 4.1 `page.tsx` の `Scatter 3D` 枠を `Scatter3DPanel` へ差し替える
+  - [x] 4.1 `page.tsx` の `Scatter 3D` 枠を `Scatter3DPanel` へ差し替える
     _Requirements: 10.1_
     _Boundary: page_
     _Depends: 3.4_
@@ -156,4 +156,5 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 | 3.1 `Scatter3DPanel` の骨格と購読 | `d189649` |
 | 3.2 キャンバスの寸法の追随 | `076fd49` |
 | 3.3 `requestAnimationFrame` の回転ループ | `ea66ea2` |
-| 3.4 点群の描画(奥行き順・大きさと不透明度・トークンの解決) | (このコミット) |
+| 3.4 点群の描画(奥行き順・大きさと不透明度・トークンの解決) | `5854a2c` |
+| 4.1 `page.tsx` の枠の差し替え | (このコミット) |

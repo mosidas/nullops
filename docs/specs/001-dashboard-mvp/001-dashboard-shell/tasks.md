@@ -200,7 +200,7 @@
     - 検証コマンド: `go vet ./... && go test ./...` / `wails dev` を起動し、DevTools のコンソールで `console.log(window.outerWidth, window.outerHeight)` が 1440 × 900 を示すことを確認する / ウィンドウを縮めても同じ値が 1100 × 720 を下回らないことを確認する
 
 - [ ] 5. ログストリームパネル（購読・併合・描画）
-  - [ ] 5.1 `subscribeLog` と `loadSnapshot` を実装する。`subscribeLog` は `EventsOn` が返す解除関数をそのまま返し、`EventsOff` を使わない（そのハンドラだけが解除される）。型は `wailsjs/go/models` の `main.LogLine` / `main.DashboardSnapshot` を使う（この生成物はタスク 4.4 の `wails build` で作られる）
+  - [x] 5.1 `subscribeLog` と `loadSnapshot` を実装する。`subscribeLog` は `EventsOn` が返す解除関数をそのまま返し、`EventsOff` を使わない（そのハンドラだけが解除される）。型は `wailsjs/go/models` の `main.LogLine` / `main.DashboardSnapshot` を使う（この生成物はタスク 4.4 の `wails build` で作られる）
     _Requirements: 2.8_
     _Boundary: FeedClient_
     _Depends: 4.3, 4.4_
@@ -300,6 +300,9 @@
 - **`math/rand/v2` は使えない(タスク 4.4 で判明)**。Wails v2.13.0 の `wails build` は bindings 生成の段で `internal error: package "math/rand/v2" without types was imported from "nullops"` で落ちる。同じ生成を単独で行う `wails generate module` は成功するため、`build` 側の `packages.Load` の LoadMode の違いが原因と見られる。spec.md は乱数生成器のパッケージを規定していないため、`math/rand`(v1)へ移した(`NewPCG` → `NewSource`、`Int64N` → `Int63n`、`IntN` → `Intn`)。擬似データの見え方が起動ごとに変わればよく暗号強度は要らないため、v1 で要件を満たす。**後続の作業単位も `math/rand/v2` を import しないこと。**
 - `wails generate module` は `wails build` より速く bindings だけを再生成する。バインディングの型を確かめたいだけのときはこちらを使う。
 - `build/bin` / `frontend/dist` / `frontend/wailsjs` は `.gitignore` 済みで、`wails build` 後の `git status` はクリーンだった。Next.js 16 による `tsconfig.json` / `AGENTS.md` / `CLAUDE.md` の自動書き換えも `wails build` では起きなかった(`next dev` 固有と見られる)。
+
+- タスク 5.1 の検証コマンド `grep -rn "EventsOff" frontend/src` は**コメント中の語にも当たる**。`EventsOff` を使わない理由をコメントへ書くと 0 件にならないため、その API 名を書かずに理由だけを残した(「イベント名に紐づく全リスナーを外す側の API を使わない」)。
+- `frontend/wailsjs` は `.gitignore` 済みだが、`frontend/src/lib/feed.ts` はそこから型と関数を import する。したがって**チェックアウト直後に `npm run lint` / `npx tsc --noEmit` は通らない**。先に `wails build` か `wails generate module` でバインディングを生成すること。
 
 ### 未検証項目(人間が確認すべきこと)
 

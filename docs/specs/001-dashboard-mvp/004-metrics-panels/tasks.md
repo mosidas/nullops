@@ -71,7 +71,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `metric.go`(新規), `metric_test.go`(新規)
     - 仕様参照: spec.md §6.1〜§6.5, §7 Requirement 2・4.1〜4.4
     - 検証コマンド: `go vet ./...`, `go test ./...`
-  - [ ] 1.2 `metricSource` を作り `feed.Source` を構造的に満たす
+  - [x] 1.2 `metricSource` を作り `feed.Source` を構造的に満たす
     _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 3.1, 3.2, 3.3, 3.4, 3.5, 4.5, 4.6, 4.7_
     _Boundary: metricSource_
     _Depends: 1.1_

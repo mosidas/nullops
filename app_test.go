@@ -553,6 +553,31 @@ func TestMetricWiringConstants(t *testing.T) {
 	}
 }
 
+// 受け入れ基準 11.6: 6 パネル同時稼働時の 1 秒あたりの送出回数の合計が 10 回以下。
+//
+// 送出間隔は各生成器の定数であり、実際に 1 秒待って数えるテストは間隔の乱数
+// （logSource）で間欠的に落ちる。定数から期待値を計算して押さえるのは、
+// 生成器を足したり間隔を縮めたりしたときに、描画の滑らかさを IPC の頻度へ
+// 依存させる変更をここで止めるためである。
+func TestEmissionRateWithinBudget(t *testing.T) {
+	// logSource の間隔は [logMinInterval, logMaxInterval] の一様分布であり、
+	// 平均は両端の中点になる。
+	logMeanInterval := (logMinInterval + logMaxInterval) / 2
+
+	perSecond := func(d time.Duration) float64 { return float64(time.Second) / float64(d) }
+
+	total := perSecond(logMeanInterval) +
+		perSecond(commitInterval) +
+		perSecond(graphInterval) +
+		perSecond(scatterInterval) +
+		perSecond(metricInterval)
+
+	const budget = 10.0
+	if total > budget {
+		t.Errorf("1 秒あたりの送出回数の合計 = %.2f, 上限 %.1f を超えた", total, budget)
+	}
+}
+
 // 受け入れ基準 6.1・6.4: startup が metricSource を Runner へ登録して
 // nullops:metric の送出を始め、shutdown の後は新たに送出しない。
 func TestStartupEmitsMetricFrames(t *testing.T) {

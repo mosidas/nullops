@@ -14,4 +14,7 @@ type DashboardSnapshot struct {
 	Commits []Commit `json:"commits"`
 	// Graph は擬似依存関係。Nodes・Edges は nil にならない(同上)。
 	Graph DependencyGraph `json:"graph"`
+	// Metrics は折れ線の履歴とタコメータの最新の読み。
+	// Series・Points は nil にならない(同上)。
+	Metrics MetricHistory `json:"metrics"`
 }

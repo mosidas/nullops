@@ -17,6 +17,13 @@ const (
 // appLogCapacity は保持するログ行の上限。
 const appLogCapacity = 500
 
+// appMetricCapacity は保持する時系列の点数の上限。
+//
+// metricInterval(500 ms)× 240 = 2 分ぶん。折れ線の枠幅に収まる点数は
+// これより少なく、フロントエンドが新しい側から切り出して描く
+// (spec.md §8 保持件数)。
+const appMetricCapacity = 240
+
 // shutdownGrace は終了時に Run の復帰を待つ上限。
 const shutdownGrace = time.Second
 
@@ -30,6 +37,7 @@ type App struct {
 	scatter *scatterSource
 	commits *commitSource
 	graph   *graphSource
+	metrics *metricSource
 
 	// newEmitter は送信先の Emitter を作る。
 	//
@@ -57,8 +65,9 @@ func (a *App) startup(ctx context.Context) {
 	a.scatter = newScatterSource(scatterPointCount, newSeededRand())
 	a.commits = newCommitSource(appCommitCapacity, newSeededRand())
 	a.graph = newGraphSource(newSeededRand())
+	a.metrics = newMetricSource(appMetricCapacity, newSeededRand())
 
-	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs, a.scatter, a.commits, a.graph)
+	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs, a.scatter, a.commits, a.graph, a.metrics)
 	if err != nil {
 		// 事前条件はこの呼び出し位置で静的に満たされる。到達はプログラマの誤り。
 		panic("feed.NewRunner の事前条件を満たしていない: " + err.Error())
@@ -128,6 +137,7 @@ func (a *App) Snapshot() DashboardSnapshot {
 		Scatter: ScatterCloud{Points: []ScatterPoint{}},
 		Commits: []Commit{},
 		Graph:   DependencyGraph{Nodes: []GraphNode{}, Edges: []GraphEdge{}},
+		Metrics: MetricHistory{Series: []MetricSeriesMeta{}, Points: []MetricPoint{}},
 	}
 	if a.logs != nil {
 		snapshot.Log = a.logs.Snapshot()
@@ -140,6 +150,9 @@ func (a *App) Snapshot() DashboardSnapshot {
 	}
 	if a.graph != nil {
 		snapshot.Graph = a.graph.Snapshot()
+	}
+	if a.metrics != nil {
+		snapshot.Metrics = a.metrics.Snapshot()
 	}
 	return snapshot
 }

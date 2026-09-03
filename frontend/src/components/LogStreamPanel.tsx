@@ -4,6 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { main } from '../../wailsjs/go/models';
 import { loadSnapshot, subscribeLog } from '../lib/feed';
 
+// このパネルだけ framestats の recordFrame を呼ばない。描画が DOM と React の
+// 再描画で進み requestAnimationFrame のループを持たないため、記録できるのは
+// フレーム間隔ではなくログイベントの到着間隔（数百ミリ秒）になる。それを
+// 同じ報告へ混ぜると p95 20 ms の判定基準（spec.md §9.3）が常に不合格を指し、
+// 判断の材料を壊す。このパネルが主スレッドを占める影響は、同じスレッドで回る
+// 他 5 パネルのフレーム間隔の悪化として現れるので取りこぼさない。
+
 // 表示行数の上限。古い行から捨てる（spec.md §7 Requirement 2.6）。
 const MAX_LINES = 300;
 

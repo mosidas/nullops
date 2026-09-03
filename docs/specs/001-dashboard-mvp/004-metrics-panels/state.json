@@ -1,0 +1,11 @@
+{
+  "workflow": "sdd",
+  "unit": "metrics-panels",
+  "state": "completed",
+  "approvals": {
+    "spec": true,
+    "tasks": true
+  },
+  "created": "2026-09-03",
+  "updated": "2026-09-03"
+}

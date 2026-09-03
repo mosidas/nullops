@@ -3,7 +3,11 @@
 import { useEffect, useRef } from 'react';
 import type { main } from '../../wailsjs/go/models';
 import { loadSnapshot, subscribeScatter } from '../lib/feed';
+import { recordFrame } from '../lib/framestats';
 import { type Projected, projectPoint, SCATTER_PITCH } from '../lib/project';
+
+/** 計測器へ渡すパネル名（spec.md §9.1）。 */
+const PANEL_NAME = 'scatter';
 
 /**
  * このパネルが読む点群の形。
@@ -262,6 +266,9 @@ export function Scatter3DPanel(): React.JSX.Element {
 
     const frame = (nowMs: number): void => {
       handle = window.requestAnimationFrame(frame);
+      // requestAnimationFrame が渡す時刻をそのまま使う。performance.now() を
+      // 別に読むと、コールバック開始からの誤差が計測へ混じるため（spec.md §9.1）。
+      recordFrame(PANEL_NAME, nowMs);
 
       // 経過時間の上限を切るのは、最小化からの復帰などでフレームが長く空いたときに
       // ヨーが一気に進んで点群が飛ぶのを防ぐため（spec.md §7 7.3）。

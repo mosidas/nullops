@@ -4,6 +4,10 @@ import { useEffect, useRef } from 'react';
 import type { main } from '../../wailsjs/go/models';
 import { lerp, type NodePlacement, placeNode } from '../lib/depgraph';
 import { loadSnapshot, subscribeGraph } from '../lib/feed';
+import { recordFrame } from '../lib/framestats';
+
+/** 計測器へ渡すパネル名（spec.md §9.1）。 */
+const PANEL_NAME = 'depgraph';
 
 /**
  * このパネルが読むグラフの形。
@@ -216,6 +220,9 @@ export function DependencyGraphPanel(): React.JSX.Element {
 
     const frame = (): void => {
       handle = window.requestAnimationFrame(frame);
+      // 早期 return より前に記録する。描き直しを省いたフレームも 1 枚として
+      // 数えないと、パネルごとのフレーム間隔が比較できなくなるため（spec.md §9.1）。
+      recordFrame(PANEL_NAME, performance.now());
 
       const view = viewRef.current;
       if (view.width === 0 || view.height === 0) {

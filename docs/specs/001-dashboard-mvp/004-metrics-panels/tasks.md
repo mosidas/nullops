@@ -110,7 +110,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`
 
 - [ ] 4. 2 パネルの描画
-  - [ ] 4.1 `TimeseriesPanel` を作る
+  - [x] 4.1 `TimeseriesPanel` を作る
     _Requirements: 7.1, 7.2, 7.4, 7.5, 7.6, 7.7, 7.8, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
     _Boundary: TimeseriesPanel_
     _Depends: 3.1, 3.2_
@@ -119,7 +119,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/components/TimeseriesPanel.tsx`(新規)
     - 仕様参照: spec.md §5.5, §5.7, §6.8 トークン, §7 Requirement 7・8・10
     - 検証コマンド: `cd frontend && npm run lint`
-  - [ ] 4.2 `GaugePanel` を作る
+  - [x] 4.2 `GaugePanel` を作る
     _Requirements: 7.1, 7.3, 7.4, 7.5, 7.6, 7.7, 9.4, 9.5, 9.6, 9.7, 9.8, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
     _Boundary: GaugePanel_
     _Depends: 3.1, 3.2_

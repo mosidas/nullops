@@ -73,12 +73,21 @@ func TestStartupEmitsLogLines(t *testing.T) {
 	defer stopApp(t, a)
 
 	// 送出間隔の上限は 400 ms。3 件そろうまで余裕をもって待つ。
-	waitFor(t, 5*time.Second, "3 件の送出", func() bool { return len(em.snapshot()) >= 3 })
-
-	for i, c := range em.snapshot() {
-		if c.eventName != logEventName {
-			t.Fatalf("%d 番目のイベント名が一致しない: got %q, want %q", i, c.eventName, logEventName)
+	//
+	// ログ以外の送出元（scatter・commits・graph）が同じ Runner に同居するため、
+	// 全イベントを走査すると他のイベントが混ざる。ログの送出だけに絞って検査する。
+	logEmits := func() []recordedEmit {
+		var got []recordedEmit
+		for _, c := range em.snapshot() {
+			if c.eventName == logEventName {
+				got = append(got, c)
+			}
 		}
+		return got
+	}
+	waitFor(t, 5*time.Second, "3 件のログ送出", func() bool { return len(logEmits()) >= 3 })
+
+	for i, c := range logEmits() {
 		lines, ok := c.payload.([]LogLine)
 		if !ok {
 			t.Fatalf("%d 番目の payload が []LogLine でない: got %T", i, c.payload)

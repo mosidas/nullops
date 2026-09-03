@@ -26,7 +26,8 @@ type App struct {
 	cancel context.CancelFunc // 自前の ctx を止める
 	done   chan struct{}      // Runner の終了を待つ
 
-	logs *logSource
+	logs    *logSource
+	scatter *scatterSource
 
 	// newEmitter は送信先の Emitter を作る。
 	//
@@ -48,11 +49,12 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// scenario と logSource は別々の mutex で自身を守るため、*rand.Rand を共有しない。
+	// scenario・logSource・scatterSource は別々の mutex で自身を守るため、*rand.Rand を共有しない。
 	sc := newScenario(appMinHold, appMaxHold, newSeededRand(), time.Now)
 	a.logs = newLogSource(appLogCapacity, newSeededRand(), sc)
+	a.scatter = newScatterSource(scatterPointCount, newSeededRand())
 
-	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs)
+	runner, err := feed.NewRunner(a.newEmitter(ctx), a.logs, a.scatter)
 	if err != nil {
 		// 事前条件はこの呼び出し位置で静的に満たされる。到達はプログラマの誤り。
 		panic("feed.NewRunner の事前条件を満たしていない: " + err.Error())
@@ -115,9 +117,17 @@ func (a *App) shutdown(ctx context.Context) {
 // 呼び出しによって logSource と scenario の状態は変化しない(spec.md §5.4)。
 // startup を経ずに呼ばれても error にせず空のスナップショットを返す。
 // バインディングは事前条件を持たない(いつ・何回呼んでもよい)ためである。
+// 生成器ごとに nil を個別に見るのは、テストが片方だけを差し替えて呼ぶため。
 func (a *App) Snapshot() DashboardSnapshot {
-	if a.logs == nil {
-		return DashboardSnapshot{Log: []LogLine{}}
+	snapshot := DashboardSnapshot{
+		Log:     []LogLine{},
+		Scatter: ScatterCloud{Points: []ScatterPoint{}},
 	}
-	return DashboardSnapshot{Log: a.logs.Snapshot()}
+	if a.logs != nil {
+		snapshot.Log = a.logs.Snapshot()
+	}
+	if a.scatter != nil {
+		snapshot.Scatter = a.scatter.Snapshot()
+	}
+	return snapshot
 }

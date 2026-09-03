@@ -8,4 +8,6 @@ package main
 type DashboardSnapshot struct {
 	// Log は古い順のログ行。nil にならない(JSON 化して null にしないため)。
 	Log []LogLine `json:"log"`
+	// Scatter は 3D 散布図の点群。Points は nil にならない(同上)。
+	Scatter ScatterCloud `json:"scatter"`
 }

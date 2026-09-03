@@ -96,7 +96,8 @@ unit #1〜#3 の各生成器と同じく `feed.Source` を構造的に満たす�
 
 - **定義**:
   ```ts
-  export function subscribeMetrics(onFrame: (frame: main.MetricFrame) => void): () => void;
+  // MetricFrame はバインディング生成器が出力しないため feed.ts が組み立てて export する（§6.4）。
+  export function subscribeMetrics(onFrame: (frame: MetricFrame) => void): () => void;
   ```
 - **事後条件**: 戻り値を呼ぶとその購読だけが解除される(イベント名に紐づく全リスナーを外す API を使わない。他パネルの購読を切らないため)。同じイベントを 2 つのパネルが購読しても互いの解除に影響しない。
 - **エラー**: 例外を投げない。payload が期待の形(`point` と `gauge` を持つ物体)でない場合はコールバックを呼ばず `console.error` に留める(擬似ダッシュボードに本物のエラーを表示しない。unit #1 spec §8 と同じ規律)。
@@ -223,7 +224,7 @@ type MetricFrame struct {
 
 - **不変条件**: `Series` は nil でなく、長さが `Point.Values` の長さに等しい。`Series` の `ID` は互いに重複しない。`Point.Seq` と `Gauge.Seq` は等しい(同じフレームであることを両パネルが `Seq` で照合できるため)。
 - **ロジックの所在**: 値の揺らし方・ゾーンの遷移・正規化は `metricSource` に集約する。`MetricFrame` は値の運搬に徹する。
-- **シリアライズ形式**: Wails のバインディング生成器が `frontend/wailsjs/go/models.ts` へ TypeScript 型として出力し、フロントエンドはそれをイベントハンドラでも使う。
+- **シリアライズ形式**: `MetricSeriesMeta`・`MetricPoint`・`GaugeReading` は `App.Snapshot` の戻り値から辿れるため、Wails のバインディング生成器が `frontend/wailsjs/go/models.ts` へ TypeScript 型として出力する。**`MetricFrame` 自体は出力されない。** バインディング生成器はバインドされたメソッドのシグネチャから辿れる型だけを出力し、`MetricFrame` はイベントの payload にしか現れないためである(実装で判明。unit #2・#3 の `ScatterCloud`・`DependencyGraph` は `Snapshot` の戻り値の一部であり出力される点が違う)。生成物を手で編集しない規律(`CLAUDE.md`)に従い、フロントエンドは生成された 3 つの型から `frontend/src/lib/feed.ts` で同じ形の `MetricFrame` を組み立てて使う。
 
 ### 6.5. `MetricHistory`(Go)
 

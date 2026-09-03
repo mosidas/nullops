@@ -81,7 +81,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `go vet ./...`, `go test ./...`, `go test -race ./...`
 
 - [ ] 2. Go 側の結線と初期表示
-  - [ ] 2.1 `DashboardSnapshot` へ `Metrics` を足し `Runner` へ登録する
+  - [x] 2.1 `DashboardSnapshot` へ `Metrics` を足し `Runner` へ登録する
     _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4_
     _Boundary: App_
     _Depends: 1.2_

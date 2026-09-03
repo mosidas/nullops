@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -202,7 +203,8 @@ func TestSnapshotEmptyMarshalsToEmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal が失敗した: %v", err)
 	}
-	want := `{"log":[],"scatter":{"seq":0,"points":[]},"commits":[],"graph":{"seq":0,"nodes":[],"edges":[]}}`
+	want := `{"log":[],"scatter":{"seq":0,"points":[]},"commits":[],"graph":{"seq":0,"nodes":[],"edges":[]},` +
+		`"metrics":{"series":[],"points":[],"gauge":{"seq":0,"value":0,"display":0,"zone":"","label":""}}}`
 	if got := string(b); got != want {
 		t.Errorf("0 件のスナップショットの JSON = %s, 期待 %s", got, want)
 	}
@@ -463,5 +465,147 @@ func TestStartupUsesSpecifiedGraphPanelParameters(t *testing.T) {
 	}
 	if graphNodeCount != 10 {
 		t.Errorf("ノード数が一致しない: got %d, want 10", graphNodeCount)
+	}
+}
+
+// 受け入れ基準 5.1・5.2・5.6: startup を経ない Snapshot も nil を返さず、
+// Metrics が 0 件・Gauge.Seq が 0 になる。
+func TestSnapshotWithoutStartupHasEmptyMetrics(t *testing.T) {
+	a := NewApp()
+
+	got := a.Snapshot()
+	if got.Metrics.Series == nil || got.Metrics.Points == nil {
+		t.Fatal("startup 前の Snapshot().Metrics の Series / Points が nil。空配列でなければならない")
+	}
+	if len(got.Metrics.Series) != 0 || len(got.Metrics.Points) != 0 {
+		t.Errorf("startup 前の Snapshot().Metrics の件数 = (%d, %d), 期待 (0, 0)",
+			len(got.Metrics.Series), len(got.Metrics.Points))
+	}
+	if got.Metrics.Gauge.Seq != 0 {
+		t.Errorf("startup 前の Snapshot().Metrics.Gauge.Seq = %d, 期待 0", got.Metrics.Gauge.Seq)
+	}
+}
+
+// 受け入れ基準 5.4: startup の後の Snapshot は系列の揃った履歴を返す。
+func TestSnapshotAfterStartupHasMetricSeries(t *testing.T) {
+	a, _ := newTestApp()
+	a.metrics = newMetricSource(appMetricCapacity, newSeededRand())
+
+	got := a.Snapshot()
+	if len(got.Metrics.Series) != metricSeriesCount {
+		t.Errorf("Snapshot().Metrics.Series の件数 = %d, 期待 %d", len(got.Metrics.Series), metricSeriesCount)
+	}
+}
+
+// 受け入れ基準 5.3: Snapshot は metricSource の内部状態を変えない。
+func TestSnapshotDoesNotAdvanceMetrics(t *testing.T) {
+	a, _ := newTestApp()
+	a.metrics = newMetricSource(appMetricCapacity, newSeededRand())
+	for range 3 {
+		a.metrics.Next()
+	}
+
+	before := a.Snapshot().Metrics
+	for range 5 {
+		a.Snapshot()
+	}
+	after := a.Snapshot().Metrics
+
+	if len(before.Points) != len(after.Points) {
+		t.Fatalf("Snapshot が Metrics.Points の件数を変えた: %d → %d", len(before.Points), len(after.Points))
+	}
+	if before.Gauge != after.Gauge {
+		t.Errorf("Snapshot が Metrics.Gauge を変えた: %+v → %+v", before.Gauge, after.Gauge)
+	}
+	for i := range before.Points {
+		if before.Points[i].Seq != after.Points[i].Seq {
+			t.Errorf("Snapshot が点 %d の Seq を変えた: %d → %d", i, before.Points[i].Seq, after.Points[i].Seq)
+		}
+	}
+}
+
+// 受け入れ基準 5.5: 戻り値の書き換えが内部の保持点へ波及しない。
+func TestSnapshotMetricsIsCopy(t *testing.T) {
+	a, _ := newTestApp()
+	a.metrics = newMetricSource(appMetricCapacity, newSeededRand())
+	a.metrics.Next()
+
+	got := a.Snapshot()
+	got.Metrics.Points[0].Values[0] = 42.0
+
+	if again := a.Snapshot(); again.Metrics.Points[0].Values[0] == 42.0 {
+		t.Error("戻り値への変更が内部へ波及した。Snapshot は別の配列を返さなければならない")
+	}
+}
+
+// 受け入れ基準 6.3: 結線値の固定。
+//
+// 生成器自体のテストは小さい値で回すため、実際に App が渡す値はここでしか守れない。
+func TestMetricWiringConstants(t *testing.T) {
+	if appMetricCapacity != 240 {
+		t.Errorf("appMetricCapacity = %d, 期待 240", appMetricCapacity)
+	}
+	if metricSeriesCount != 3 {
+		t.Errorf("metricSeriesCount = %d, 期待 3", metricSeriesCount)
+	}
+	if metricInterval != 500*time.Millisecond {
+		t.Errorf("metricInterval = %v, 期待 500ms", metricInterval)
+	}
+}
+
+// 受け入れ基準 6.1・6.4: startup が metricSource を Runner へ登録して
+// nullops:metric の送出を始め、shutdown の後は新たに送出しない。
+func TestStartupEmitsMetricFrames(t *testing.T) {
+	a, em := newTestApp()
+	a.startup(context.Background())
+
+	metricEmits := func() []recordedEmit {
+		var got []recordedEmit
+		for _, c := range em.snapshot() {
+			if c.eventName == metricEventName {
+				got = append(got, c)
+			}
+		}
+		return got
+	}
+	// 送出間隔は 500 ms。2 件そろうまで余裕をもって待つ。
+	waitFor(t, 5*time.Second, "2 件のメトリクス送出", func() bool { return len(metricEmits()) >= 2 })
+
+	for i, c := range metricEmits() {
+		frame, ok := c.payload.(MetricFrame)
+		if !ok {
+			t.Fatalf("%d 番目の payload が MetricFrame でない: got %T", i, c.payload)
+		}
+		if want := uint64(i + 1); frame.Point.Seq != want {
+			t.Errorf("%d 番目の Point.Seq = %d, 期待 %d", i, frame.Point.Seq, want)
+		}
+		if len(frame.Series) != metricSeriesCount {
+			t.Errorf("%d 番目の Series の件数 = %d, 期待 %d", i, len(frame.Series), metricSeriesCount)
+		}
+	}
+
+	a.shutdown(context.Background())
+	after := len(metricEmits())
+	time.Sleep(2 * metricInterval)
+	if got := len(metricEmits()); got != after {
+		t.Errorf("shutdown の後にメトリクスの送出が増えた: got %d 件, want %d 件", got, after)
+	}
+}
+
+// 受け入れ基準 6.2: 各生成器へ共有しない専用の *rand.Rand を渡す。
+func TestSeededRandsAreDistinct(t *testing.T) {
+	a, _ := newTestApp()
+	a.startup(context.Background())
+	defer stopApp(t, a)
+
+	rnds := map[*rand.Rand]string{
+		a.logs.rnd:    "logs",
+		a.scatter.rnd: "scatter",
+		a.commits.rnd: "commits",
+		a.graph.rnd:   "graph",
+		a.metrics.rnd: "metrics",
+	}
+	if len(rnds) != 5 {
+		t.Errorf("生成器のあいだで *rand.Rand を共有している: 相異なるのは %d 個, 期待 5 個", len(rnds))
 	}
 }

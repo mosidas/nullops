@@ -104,6 +104,58 @@ export function subscribeGraph(onGraph: (graph: main.DependencyGraph) => void): 
   });
 }
 
+/** メトリクスフィードのイベント名。Go 側の `metricEventName` と対になる。 */
+const METRIC_EVENT = 'nullops:metric';
+
+/**
+ * メトリクスの 1 フレーム（Go 側の `MetricFrame`）。
+ *
+ * `wailsjs/go/models.ts` へ生成されないのは、Wails のバインディング生成器が
+ * バインドされたメソッドのシグネチャから辿れる型だけを出力し、`MetricFrame` は
+ * イベントの payload にしか現れないためである。生成物を手で編集しない規律
+ * （CLAUDE.md）に従い、生成された各部品からここで組み立てる。
+ */
+export type MetricFrame = {
+  series: main.MetricSeriesMeta[];
+  point: main.MetricPoint;
+  gauge: main.GaugeReading;
+};
+
+/** payload がメトリクスの 1 フレームの形をしているかを絞り込む。`any` を使わず `unknown` から検査する。 */
+function isMetricFrame(value: unknown): value is MetricFrame {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as { point?: unknown; gauge?: unknown; series?: unknown };
+  return (
+    typeof candidate.point === 'object' &&
+    candidate.point !== null &&
+    typeof candidate.gauge === 'object' &&
+    candidate.gauge !== null &&
+    Array.isArray(candidate.series)
+  );
+}
+
+/**
+ * 折れ線とタコメータの更新イベントを購読する。戻り値を呼ぶとこの購読だけが解除される。
+ *
+ * subscribeGraph と同じく、イベント名に紐づく全リスナーを外す側の API を使わない。
+ * 折れ線とタコメータの 2 パネルが同じイベントを購読するため、片方の
+ * アンマウントで他方が止まってはならない（spec.md §5.4・受け入れ基準 7.7）。
+ */
+export function subscribeMetrics(onFrame: (frame: MetricFrame) => void): () => void {
+  // Go 側は EventsEmit へ payload を 1 個だけ渡すため、受け取るのは data[0] の MetricFrame。
+  return EventsOn(METRIC_EVENT, (...data: unknown[]) => {
+    const frame = data[0];
+    if (!isMetricFrame(frame)) {
+      // 擬似ダッシュボードに本物のエラーを出さない（受け入れ基準 7.6）。異常はコンソールに留める。
+      console.error(`${METRIC_EVENT} のペイロードがメトリクスの形ではない:`, frame);
+      return;
+    }
+    onFrame(frame);
+  });
+}
+
 /**
  * 起動直後の初期表示を 1 回で取得する。副作用は無く、いつ・何回呼んでもよい。
  *

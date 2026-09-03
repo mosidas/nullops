@@ -91,7 +91,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `go vet ./...`, `go test -race -count=1 ./...`
 
 - [ ] 3. フロントエンドの購読・純関数・計測器
-  - [ ] 3.1 `subscribeMetrics` とフレーム間隔の計測器を作る
+  - [x] 3.1 `subscribeMetrics` とフレーム間隔の計測器を作る
     _Requirements: 7.6, 12.4, 12.5_
     _Boundary: feed_
     _Depends: 2.1_
@@ -100,7 +100,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 対象ファイル: `frontend/src/lib/feed.ts`(変更), `frontend/src/lib/framestats.ts`(新規)
     - 仕様参照: spec.md §5.4 購読, §5.9 計測器, §9.1, §7 Requirement 7.6・12.4・12.5
     - 検証コマンド: `cd frontend && npm run lint`
-  - [ ] 3.2 折れ線とタコメータの配置の純関数を作る
+  - [x] 3.2 折れ線とタコメータの配置の純関数を作る
     _Requirements: 8.1, 8.2, 9.1, 9.2, 9.3_
     _Boundary: metrics_
     _Concurrent: 3.1 と並行してよい_

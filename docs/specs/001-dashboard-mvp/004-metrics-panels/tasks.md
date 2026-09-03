@@ -64,7 +64,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
 ## タスク一覧
 
 - [ ] 1. Go 側の擬似メトリクスの契約と生成器
-  - [ ] 1.1 メトリクスの型と不変条件の強制を作る
+  - [x] 1.1 メトリクスの型と不変条件の強制を作る
     _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 4.1, 4.2, 4.3, 4.4_
     _Boundary: MetricPoint_
     _Interfaces: Produces `MetricPoint{Seq uint64; Values []float64}` / `GaugeReading{Seq uint64; Value, Display float64; Zone, Label string}` / `MetricSeriesMeta{ID, Unit string; Display float64}` / `MetricFrame{Series []MetricSeriesMeta; Point MetricPoint; Gauge GaugeReading}` / `MetricHistory{Series []MetricSeriesMeta; Points []MetricPoint; Gauge GaugeReading}` / `newMetricPoint(seq uint64, values []float64) (MetricPoint, error)` / `newGaugeReading(seq uint64, value float64, label string) (GaugeReading, error)` / `newMetricSeriesMeta(id, unit string, display float64) (MetricSeriesMeta, error)` / `gaugeZoneFor(value float64) string` / `ZoneNominal` / `ZoneElevated` / `ZoneCritical` / `errMetricSeqZero` / `errMetricValueCount` / `errMetricValueRange` / `errMetricValueNotFinite` / `errMetricLabelEmpty` / `errMetricLabelNewline` / `metricSeriesCount = 3`_

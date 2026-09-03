@@ -130,7 +130,7 @@ spec.md がこの作業単位の全体に掛ける制約を逐語で写す。全
     - 検証コマンド: `cd frontend && npm run lint`
 
 - [ ] 5. 6 パネルの統合と通し確認
-  - [ ] 5.1 6 枠を結線し、地色・`$schema`・README を揃える
+  - [x] 5.1 6 枠を結線し、地色・`$schema`・README を揃える
     _Requirements: 10.8, 11.1, 11.2, 11.4, 12.2, 12.7_
     _Boundary: dashboard_
     _Depends: 4.1, 4.2_

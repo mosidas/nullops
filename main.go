@@ -27,7 +27,13 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		// 起動直後、本文が描かれるまでのあいだ見える地色。
+		//
+		// 色の正本は frontend/src/app/globals.css の @theme であり、ここは
+		// --color-surface-0 (#10141c) と同じ値を写している。Wails のオプションは
+		// Go の構造体で CSS 変数を読めないため直値になる。テンプレート由来の
+		// 値のままだと起動直後だけ本文の地色とずれて見える(spec.md §3 前提 10)。
+		BackgroundColour: &options.RGBA{R: 16, G: 20, B: 28, A: 1},
 		OnStartup:        app.startup,
 		// ウィンドウを閉じたときに擬似データの生成を止める(spec.md §6.5)。
 		OnShutdown: app.shutdown,

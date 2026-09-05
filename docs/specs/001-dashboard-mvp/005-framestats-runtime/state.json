@@ -6,7 +6,6 @@
     "spec": true,
     "tasks": true
   },
-  "blocked": "タスク 1（wails dev の表示不具合）は原因の確定に WebView のコンソールの最初の例外が要る。tasks.md の「D. 原因の切り分け」を人間が実行して情報を返すまで進められない。",
   "created": "2026-09-05",
   "updated": "2026-09-05"
 }

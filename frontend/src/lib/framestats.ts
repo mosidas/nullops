@@ -99,8 +99,10 @@ export function recordFrame(panel: string, now: number): void {
 /**
  * パネルごとの計測フレーム数・平均・p95・最大（いずれもミリ秒）を 1 行にまとめる。
  *
- * export するのは、5 秒の周期を待たずに DevTools のコンソールから
- * 任意の時点で読めるようにするため（spec.md §5.9）。
+ * 005-framestats-runtime spec.md §5.1 が公開 API として宣言する 3 関数の 1 つ。
+ * DevTools のコンソールから 5 秒の周期を待たずに読む経路は、この export ではなく
+ * 末尾で window.nullops へ載せる同名のプロパティが担う（バンドル後のモジュール
+ * スコープはコンソールから触れないため）。
  */
 export function frameReport(): string {
   if (!enabled) {

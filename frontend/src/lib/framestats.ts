@@ -1,9 +1,14 @@
 /**
- * 6 パネル同時稼働時のフレーム間隔を数値で見るための計測器（spec.md §5.9・§9）。
+ * 6 パネル同時稼働時のフレーム間隔を数値で見るための計測器。
  *
  * requestAnimationFrame のループを 1 本へ共有するかを実測で決めるために置く。
  * 目視に頼らず数値で判定するための唯一の手段であり、判定の基準は
- * 「いずれかのパネルの p95 が 20 ms を継続して超えるか」である（spec.md §9.3）。
+ * 「いずれかのパネルの p95 が 20 ms を継続して超えるか」である。
+ *
+ * 仕様の所在（docs/specs/001-dashboard-mvp 配下）:
+ * - 計測器そのものと判定基準: 004-metrics-panels/spec.md §5.9・§9
+ * - 実行時の有効化と window.nullops の口: 005-framestats-runtime/spec.md §5・§7
+ * 以下のコメントで節番号だけを書く箇所は、断りが無ければ 004 の spec.md を指す。
  */
 
 /** 報告を出す周期（ミリ秒）。 */
@@ -29,13 +34,15 @@ type PanelStats = {
 };
 
 /**
- * 計測が有効かどうか。
+ * 計測が有効かどうか。既定は無効（005-framestats-runtime spec.md 受け入れ基準 1.1〜1.3）。
  *
- * 配布ビルドへ計測の負荷を持ち込まないため、production では無効にする
- * （受け入れ基準 12.5）。モジュールの読み込み時に 1 度だけ判定するのは、
- * 毎フレーム process.env を読まないため。
+ * ビルド種別（process.env.NODE_ENV）で分岐しない。判定したいのは配布ビルドの
+ * フレーム間隔であり、開発ビルドは React Strict Mode の二重描画と最小化なしの
+ * JS のぶんだけ悪い値が出て判断材料にならないため、配布ビルドでも有効に
+ * できる必要がある。分岐を残さないのは、開発ビルドで確かめた手順が
+ * そのまま配布ビルドで通るようにするため。
  */
-const enabled = process.env.NODE_ENV !== 'production';
+let enabled = false;
 
 /**
  * パネル名ごとの計測状態。
@@ -92,8 +99,10 @@ export function recordFrame(panel: string, now: number): void {
 /**
  * パネルごとの計測フレーム数・平均・p95・最大（いずれもミリ秒）を 1 行にまとめる。
  *
- * export するのは、5 秒の周期を待たずに DevTools のコンソールから
- * 任意の時点で読めるようにするため（spec.md §5.9）。
+ * 005-framestats-runtime spec.md §5.1 が公開 API として宣言する 3 関数の 1 つ。
+ * DevTools のコンソールから 5 秒の周期を待たずに読む経路は、この export ではなく
+ * 末尾で window.nullops へ載せる同名のプロパティが担う（バンドル後のモジュール
+ * スコープはコンソールから触れないため）。
  */
 export function frameReport(): string {
   if (!enabled) {
@@ -121,4 +130,61 @@ export function frameReport(): string {
     parts.push(`${panel} n=${sorted.length} mean=${mean.toFixed(1)} p95=${p95.toFixed(1)} max=${max.toFixed(1)}`);
   }
   return `[framestats] ${parts.join(' | ')}`;
+}
+
+/**
+ * 計測の有効・無効を切り替える（005-framestats-runtime spec.md §5.1）。
+ *
+ * 無効にするときに標本と報告の時刻を捨てるのは、無効だった区間を跨いだ
+ * 間隔が次の測定に混じると mean と max が壊れるため。有効化のたびに
+ * 測り直すほうが p95 > 20 ms という判定の意味がはっきりする。
+ */
+export function setFrameStatsEnabled(next: boolean): void {
+  if (next === enabled) {
+    return;
+  }
+  enabled = next;
+  stats.clear();
+  lastReportAt = 0;
+}
+
+/**
+ * DevTools のコンソールから計測を操作するための口（005-framestats-runtime spec.md §5.2）。
+ *
+ * 配布ビルドのウィンドウにはアドレスバーが無く URL のクエリを打てない。
+ * localStorage のフラグはリロードを要するうえ次回の起動にも残り、
+ * 「何もしなければ計測は動かない」を破る。報告の読み先がそもそも
+ * コンソールなので、有効化も同じ場所で完結させる。
+ */
+type NullopsConsoleApi = {
+  enableFrameStats(): void;
+  disableFrameStats(): void;
+  frameReport(): string;
+};
+
+declare global {
+  interface Window {
+    nullops?: Partial<NullopsConsoleApi>;
+  }
+}
+
+/** 有効化したことを人間がコンソールで確かめられるよう、戻り値ではなく 1 行を出す。 */
+function enableFrameStatsFromConsole(): void {
+  setFrameStatsEnabled(true);
+  console.info('[framestats] enabled');
+}
+
+function disableFrameStatsFromConsole(): void {
+  setFrameStatsEnabled(false);
+  console.info('[framestats] disabled');
+}
+
+// サーバ側の描画では window が無い。既存の window.nullops を丸ごと置き換えず
+// プロパティだけを足すのは、同じ名前空間に先客がいた場合にそれを壊さないため。
+if (typeof window !== 'undefined') {
+  const api: Partial<NullopsConsoleApi> = window.nullops ?? {};
+  api.enableFrameStats = enableFrameStatsFromConsole;
+  api.disableFrameStats = disableFrameStatsFromConsole;
+  api.frameReport = frameReport;
+  window.nullops = api;
 }

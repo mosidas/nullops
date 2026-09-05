@@ -34,22 +34,19 @@
 
 ## タスク一覧
 
-- [ ] 1. `wails dev` のハイドレーション不具合の原因特定と修正 — **_Blocked: 原因の確定に WebView のコンソールの最初の例外が要る。本セッションのホストは画面を撮れず読めない。下の「D. 原因の切り分け」を人間が実行して情報を返すまで進められない。_**
-  - 要件: 4.1
-  - 進んだところ: 資産の配信が正常であること(17 本の script/link が全て `200`)を実測で確かめ、原因を実行側へ絞り込んだ。オリジンが `wails://wails.localhost:34115` であること、Next の HMR が必ず `wss://wails.localhost:34115/_next/hmr` を選ぶこと、その生成が `hydrateRoot` より前に走ることをソースで裏取りした(spec.md §8.1)。
-  - 進まなかったところ: `assetPrefix` を開発時のみ絶対 URL にする案を一度入れたが、クライアントが使うのは `next.config.ts` の値ではなく `getAssetPrefix()` の戻り値(pathname のみ)であり、HMR の接続先が 1 文字も変わらないことが分かったため撤回した(spec.md §8.2 の案 B)。
-  - 依存: 「D. 原因の切り分け」の結果
+当初のタスク 1(`wails dev` のハイドレーション不具合の原因特定と修正)は、依頼者の判断で本 unit の範囲から外した(2026-09-05。spec.md §2 の対象外)。進んだところ・進まなかったところの記録は下の付録に残す。番号 2・3 を詰めないのは、最終検証の記録がタスク番号で参照しているため。
+
 - [x] 2. 計測器の実行時トグルと `window` の操作口
   - 要件: 1.1 / 1.2 / 1.3 / 1.4 / 2.1〜2.7 / 3.1 / 3.2
   - 対象: `frontend/src/lib/framestats.ts`
   - 内容: `const enabled = process.env.NODE_ENV !== 'production'` を可変フラグ(初期値 `false`)へ置き換え、`setFrameStatsEnabled` を足す。無効化時に標本と `lastReportAt` を捨てる。`window.nullops` へ `enableFrameStats` / `disableFrameStats` / `frameReport` を載せる。`any` を使わずグローバルの型を宣言する。
   - 検証: `cd frontend && npm run lint`。`grep` で `recordFrame` の呼び出し元が 5 パネルのままであること。
-  - 依存: なし(タスク 1 と並行可)
+  - 依存: なし
 - [x] 3. 検証コマンドの通し実行と実測手順の記載
   - 要件: 5.1 / 5.2 / 5.3 / 5.4 / 5.5
   - 対象: 本書の Implementation Notes
   - 内容: `go vet ./...`・`go test ./...`・`cd frontend && npm run lint`・`wails build` を通す。人間だけで再現できる実測手順を残す。
-  - 依存: 1, 2
+  - 依存: 2
 
 ## Implementation Notes
 
@@ -61,15 +58,8 @@
 | :-- | :-- | :-- |
 | 1.1 / 1.2 | 何もしなければ計測が動かない | 下の「B. 配布ビルドでの実測」の 5 |
 | 2.1〜2.3 / 2.5 | 有効化・報告・無効化 | 下の「B. 配布ビルドでの実測」の 6〜10 |
-| 4.1 | `wails dev` の画面に 6 パネルの中身が出る | **未達**。下の「D. 原因の切り分け」で情報を集めてから直す |
 
 **コードを一時的に壊して確かめる手順は含めない。**
-
-### A. `wails dev` の現状確認(所要 1 分)
-
-1. 作業ツリーのルートで `wails dev` を実行する。
-2. 起動したウィンドウを見る。**現状は 6 枠の枠線と見出しだけが出る**(本 unit ではこれを直せていない)。中身が出ていれば状況が変わっているので、その旨を報告してほしい。
-3. 終了後に `git status` を確認し、`frontend/tsconfig.json` の変更と `frontend/AGENTS.md` / `frontend/CLAUDE.md` をコミットに混ぜない(`git checkout -- frontend/tsconfig.json && rm -f frontend/AGENTS.md frontend/CLAUDE.md`)。
 
 ### B. 配布ビルドでの実測(所要 8 分)
 
@@ -98,26 +88,9 @@
    - `LogStreamPanel` はこの行に出ない(rAF のループを持たないため。spec.md §2 の対象外)。
 9. **判定**: `[framestats]` の行のうち**最後の 6 行(30 秒ぶん)**を記録する。その 6 行すべてで、**同じパネルの `p95` が 20 ms を超えている**なら、rAF のループを 1 本へ共有する検討へ進む。1 行でも 20 ms 未満に戻るパネルは「継続して超えている」とは見なさない。
    - 20 ms は 60 Hz の 1 フレーム (16.7 ms) に対して 1 枚落ちが常態化していないかの境目である(`004-metrics-panels` spec.md §9.3)。判定の回数の数え方は同 §9.2 に揃えた。
-   - **境目付近(18〜22 ms)に出た場合は、そのまま結論にしない。** Web インスペクタを接続した状態が計測値へ与える影響を評価していないため(spec.md §8.3 の案 E)。その旨を添えて報告してほしい。
+   - **境目付近(18〜22 ms)に出た場合は、そのまま結論にしない。** Web インスペクタを接続した状態が計測値へ与える影響を評価していないため(spec.md §8.1 の案 E)。その旨を添えて報告してほしい。
 10. 途中で読みたくなったら `nullops.frameReport()` を実行する。5 秒の周期を待たずにその時点の 1 行が返る(有効化した直後でまだ標本が無いときは `[framestats] no samples` が返る)。測り直したいときは `nullops.disableFrameStats()` → `nullops.enableFrameStats()` で標本を捨ててから測る。
 11. 読んだ数値は本書ではなく issue のログへ残す(依頼者の指示)。
-
-### D. 原因の切り分け(`wails dev` の表示不具合。所要 3 分)
-
-タスク 1 を進めるために要る情報を集める手順。**直す手順ではない。**
-
-1. 作業ツリーのルートで `wails dev` を実行する。
-2. 起動したウィンドウで Web インスペクタを開く。`wails dev` は debug 構成なので、**右クリック → `Inspect Element` で開ける**(B とはここが違う)。
-3. Console タブを選び、**インスペクタを開いたままウィンドウを再読み込みする**(インスペクタのフォーカスで ⌘R、または Console で `location.reload()`)。起動時の例外はインスペクタを開く前に流れてしまうため、この再読み込みが要る。
-4. **コンソールに最初に出た赤いエラーの全文**(メッセージとスタックトレース)を記録する。特に次のどれに当たるかが分かれば原因が決まる。
-   - `InvariantError` / `E806`(`Expected a request ID to be defined for the document via self.__next_r`)
-   - `InvariantError` / `E783` / `E784`(`Expected document.currentScript to be a <script> element` など)
-   - `SecurityError` を伴う `WebSocket` の生成失敗
-   - 上のいずれでもない別の例外
-   - **`wss://…/_next/hmr` の TLS エラーしか出ておらず、赤いエラーが 1 つも無い**
-5. あわせて Console で `document.documentElement.id` を評価した結果と、`typeof self.__next_r` の結果を記録する。
-6. Network タブでステータスが `200` 以外の要求が無いことを確認する。
-7. 記録した内容を返してほしい。それでタスク 1 を再開できる。
 
 ### 本セッションで実行した検証コマンドと結果
 
@@ -134,30 +107,67 @@
 
 - **要件 2.7**: `wails build` が出力した production の chunk に、最小化後のコードとして `{let e=window.nullops??{};e.enableFrameStats=…,e.disableFrameStats=…,e.frameReport=l,window.nullops=e}` が残っていることを確認した(`frontend/dist/_next/static/chunks/` を `grep`)。
 - **要件 3.1 / 3.2**: `recordFrame` の呼び出しは 5 パネルのみで、`LogStreamPanel` は呼ばない。パネル名は `commit` / `depgraph` / `gauge` / `scatter` / `timeseries`。
-- **撤回した `assetPrefix` 案の実測**(spec.md §8.2 の案 B): `wails dev` の HTML の `/_next/` 配下の参照は絶対 URL になり、cross-origin の遮断にも当たらないことを確認した。ただし HMR の接続先が変わらないため撤回した。
+- **撤回した `assetPrefix` 案の実測**(spec.md 付録 A.2 の案 B): `wails dev` の HTML の `/_next/` 配下の参照は絶対 URL になり、cross-origin の遮断にも当たらないことを確認した。ただし HMR の接続先が変わらないため撤回した。
 - **修正前の切り分け**: `wails dev` の HTML が参照する 17 本の script/link をすべて `http://localhost:34115` 経由で取得し、全て `200` を返した。取得の失敗ではない。
 - **cross-origin の遮断が起きないこと**: `Referer: wails://wails.localhost:34115/` + `Sec-Fetch-Site: cross-site` / `Sec-Fetch-Mode: no-cors` を付けた JS・CSS の取得がいずれも `200`、`Origin: wails://wails.localhost:34115` を付けた `ws://localhost:3000/_next/hmr` の handshake が `101 Switching Protocols` だった。
 
-### 原因特定で実測した内容(タスク 1)
+### 最終検証パネルの結果(1 回目: 3 観点、いずれも NO-GO)
 
-`spec.md` §8.1・§8.2 に記載。要点は次のとおり。
-
-- `wails dev` の資産配信は正常だった。HTML が参照する 17 本の script/link をすべて `http://localhost:34115` 経由で取得し、全て `200` を返した。**取得の失敗ではない。**
-- ページのオリジンは `wails://wails.localhost:34115` であり scheme が `http:` でない。Next の HMR は `getAssetPrefix()` が pathname しか返さないため必ず `window.location` へ落ち、`wss://wails.localhost:34115/_next/hmr` を選ぶ。TLS サーバは無いので必ず失敗する。
-- この WebSocket の生成は `hydrateRoot` より前に走る(`next/dist/client/app-index.js` の `hydrate()`)。
-- **ただし `new WebSocket()` は TLS の失敗で同期例外を投げないため、これだけではハイドレーションが止まる説明にならない。** 中継役の見立て(HMR の TLS 失敗が原因)は、接続先が `wss://…` になる仕組みまでは裏が取れたが、**それが原因であることは裏が取れていない**。残る候補は spec.md §8.1 の末尾に並べた。
-- `assetPrefix` を触ってもこの接続先は変わらない(クライアントは `next.config.ts` の値を使わない)。効かないので入れていない。
-
-### 最終検証パネルの結果(3 観点、いずれも NO-GO)
+範囲を縮小する前(`wails dev` の不具合を含む)の判定。指摘への対応はこの表のとおり済ませ、縮小後に 2 回目を再実行した(次節)。
 
 | 観点 | 主な指摘 | 対応 |
 | :-- | :-- | :-- |
 | 仕様適合 | 仕様と手順が挙げるパネル名(`commit-graph` 等)が実装の `PANEL_NAME`(`commit` 等)と一致しない | 修正した(spec.md 3.1・本書 B.8) |
 | 仕様適合 | spec §5.2 の型が `NullopsConsoleApi`、実装は `Partial<NullopsConsoleApi>` | spec 側を実装に合わせ、理由を添えた |
 | 仕様適合 | `window.nullops` を上書きしない理由のコメントが「将来の拡張のため」になっており YAGNI と逆向き | コメントを書き直した |
-| 原因分析 | **`assetPrefix` 案は HMR の接続先を変えない**(クライアントは `getAssetPrefix()` の pathname のみを使う) | 変更を撤回し、spec §8.1・§8.2 を書き直した。タスク 1 は `_Blocked:` |
-| 原因分析 | 「ハイドレーション前に走る dev 専用の経路は HMR だけ」は誤り | 残る候補を spec §8.1 に列挙した |
-| 原因分析 | 観測系(Web インスペクタ)が計測値へ与える影響が未評価 | spec §8.3 に案 E として残し、本書 B.9 に注意を足した |
+| 原因分析 | **`assetPrefix` 案は HMR の接続先を変えない**(クライアントは `getAssetPrefix()` の pathname のみを使う) | 変更を撤回し、原因分析(現在は spec 付録 A.1・A.2)を書き直した。タスク 1 は `_Blocked:` とし、のちに範囲から外した |
+| 原因分析 | 「ハイドレーション前に走る dev 専用の経路は HMR だけ」は誤り | 残る候補を spec 付録 A.1 に列挙した |
+| 原因分析 | 観測系(Web インスペクタ)が計測値へ与える影響が未評価 | spec §8.1 に案 E として残し、本書 B.9 に注意を足した |
 | 手順の再現性 | `-devtools` ビルドでは右クリックのコンテキストメニューが出ない | B.4 を ⌘⇧F12 / Safari のアタッチへ差し替えた(実機未確認である旨も明記) |
 | 手順の再現性 | 判定の「続く」が回数で定義されていない | B.9 で「最後の 6 行(30 秒ぶん)」に揃えた |
 | 手順の再現性 | 既定で無効であることの確認が「行が出ていない」という不在の観察のみ | B.5 を `nullops.frameReport()` が `[framestats] disabled` を返すことの確認に変えた |
+
+## 付録: `wails dev` の表示不具合(別の依頼への申し送り)
+
+本 unit の範囲外(spec.md §2)。別の依頼を担当するセッションと、情報を集める人間のために残す。原因分析の本文は spec.md 付録 A にある。
+
+元のタスク定義(範囲から外した時点の状態):
+
+- (外した)1. `wails dev` のハイドレーション不具合の原因特定と修正 — _Blocked だった理由: 原因の確定に WebView のコンソールの最初の例外が要る。本セッションのホストは画面を撮れず読めない。付録 2を人間が実行して情報を返すまで進められない。_
+  - 要件: 4.1(現在は欠番。spec.md Requirement 4)
+  - 進んだところ: 資産の配信が正常であること(17 本の script/link が全て `200`)を実測で確かめ、原因を実行側へ絞り込んだ。オリジンが `wails://wails.localhost:34115` であること、Next の HMR が必ず `wss://wails.localhost:34115/_next/hmr` を選ぶこと、その生成が `hydrateRoot` より前に走ることをソースで裏取りした(spec.md 付録 A.1)。
+  - 進まなかったところ: `assetPrefix` を開発時のみ絶対 URL にする案を一度入れたが、クライアントが使うのは `next.config.ts` の値ではなく `getAssetPrefix()` の戻り値(pathname のみ)であり、HMR の接続先が 1 文字も変わらないことが分かったため撤回した(spec.md 付録 A.2 の案 B)。
+  - 依存: 付録 2 の結果
+
+### 付録 1. `wails dev` の現状確認(所要 1 分)
+
+1. 作業ツリーのルートで `wails dev` を実行する。
+2. 起動したウィンドウを見る。**現状は 6 枠の枠線と見出しだけが出る**(本 unit の範囲外。別の依頼で扱う)。中身が出ていれば状況が変わっているので、その旨を報告してほしい。
+3. 終了後に `git status` を確認し、`frontend/tsconfig.json` の変更と `frontend/AGENTS.md` / `frontend/CLAUDE.md` をコミットに混ぜない(`git checkout -- frontend/tsconfig.json && rm -f frontend/AGENTS.md frontend/CLAUDE.md`)。
+
+### 付録 2. 原因の切り分け(`wails dev` の表示不具合。所要 3 分)
+
+別の依頼で原因を確定するために要る情報を集める手順。**直す手順ではない。**
+
+1. 作業ツリーのルートで `wails dev` を実行する。
+2. 起動したウィンドウで Web インスペクタを開く。`wails dev` は debug 構成なので、**右クリック → `Inspect Element` で開ける**(B とはここが違う)。
+3. Console タブを選び、**インスペクタを開いたままウィンドウを再読み込みする**(インスペクタのフォーカスで ⌘R、または Console で `location.reload()`)。起動時の例外はインスペクタを開く前に流れてしまうため、この再読み込みが要る。
+4. **コンソールに最初に出た赤いエラーの全文**(メッセージとスタックトレース)を記録する。特に次のどれに当たるかが分かれば原因が決まる。
+   - `InvariantError` / `E806`(`Expected a request ID to be defined for the document via self.__next_r`)
+   - `InvariantError` / `E783` / `E784`(`Expected document.currentScript to be a <script> element` など)
+   - `SecurityError` を伴う `WebSocket` の生成失敗
+   - 上のいずれでもない別の例外
+   - **`wss://…/_next/hmr` の TLS エラーしか出ておらず、赤いエラーが 1 つも無い**
+5. あわせて Console で `document.documentElement.id` を評価した結果と、`typeof self.__next_r` の結果を記録する。
+6. Network タブでステータスが `200` 以外の要求が無いことを確認する。
+7. 記録した内容を別の依頼へ添えてほしい。それで原因の確定に進める。
+
+### 付録 3. 原因特定で実測した内容(元タスク 1)
+
+`spec.md` 付録 A.1・A.2 に記載。要点は次のとおり。
+
+- `wails dev` の資産配信は正常だった。HTML が参照する 17 本の script/link をすべて `http://localhost:34115` 経由で取得し、全て `200` を返した。**取得の失敗ではない。**
+- ページのオリジンは `wails://wails.localhost:34115` であり scheme が `http:` でない。Next の HMR は `getAssetPrefix()` が pathname しか返さないため必ず `window.location` へ落ち、`wss://wails.localhost:34115/_next/hmr` を選ぶ。TLS サーバは無いので必ず失敗する。
+- この WebSocket の生成は `hydrateRoot` より前に走る(`next/dist/client/app-index.js` の `hydrate()`)。
+- **ただし `new WebSocket()` は TLS の失敗で同期例外を投げないため、これだけではハイドレーションが止まる説明にならない。** 中継役の見立て(HMR の TLS 失敗が原因)は、接続先が `wss://…` になる仕組みまでは裏が取れたが、**それが原因であることは裏が取れていない**。残る候補は spec.md 付録 A.1 の末尾に並べた。
+- `assetPrefix` を触ってもこの接続先は変わらない(クライアントは `next.config.ts` の値を使わない)。効かないので入れていない。

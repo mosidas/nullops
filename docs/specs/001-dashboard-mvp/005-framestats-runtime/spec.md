@@ -5,9 +5,9 @@
 `004-metrics-panels` で入れたフレーム間隔の計測器 (`frontend/src/lib/framestats.ts`) には、判断材料として使えない欠点が 2 つある。
 
 1. **配布ビルドで動かない。** `const enabled = process.env.NODE_ENV !== 'production';` により、計測は開発ビルドでしか走らない。しかし開発ビルドは React Strict Mode が描画を 2 回呼び、JS も最小化されていないため、配布ビルドより悪い値が出る。判定したいのは「配布したアプリでカクつくか」(いずれかのパネルの p95 が 20 ms を継続して超えるか) であり、超えやすい側の環境で測っても判断できない。
-2. **計測できるはずの `wails dev` の画面が壊れている。** `wails dev` で起動すると 6 枠の枠線と見出しだけが出て、パネルの中身が何も描画されない。配布ビルドでは 6 パネルすべてが正常に描画される。
+2. **計測できるはずの `wails dev` の画面が壊れている。** `wails dev` で起動すると 6 枠の枠線と見出しだけが出て、パネルの中身が何も描画されない。配布ビルドでは 6 パネルすべてが正常に描画される。**この件は本 unit の範囲から外し、別の依頼として起票する**(§2 の対象外と付録 A)。
 
-本 unit は、(1) 配布ビルドで明示的に計測を有効化できる口を足し、(2) `wails dev` の表示不具合を直し、(3) 人間が配布ビルドで p95 を実測するための手順を残す。
+本 unit は、(1) 配布ビルドで明示的に計測を有効化できる口を足し、(2) 人間が配布ビルドで p95 を実測するための手順を残す。当初は `wails dev` の表示不具合の修正も範囲に含めていたが、原因の確定に実機の WebView のコンソールから取る情報が要り、本セッションのホストでは取れないため、依頼者の判断で範囲から外した(2026-09-05)。計測の実行時トグルだけで当初の目的(配布ビルドで p95 を測れるようにする)は達成されるため、止まっている件に本 unit を引きずらせない。
 
 `requestAnimationFrame` のループを 1 本へ共有するかどうかは、この unit では決めない。実測の結果を見てから別 unit で判断する。
 
@@ -16,11 +16,11 @@
 ### 対象(やること)
 
 - `frontend/src/lib/framestats.ts` に、実行時に計測を有効化・無効化する口を足す。既定は無効とし、ビルド種別 (`NODE_ENV`) で分岐しない。
-- `wails dev` でパネルの中身が描画されない原因を切り分ける(**本 unit では原因の確定に至らず、修正を入れていない**。§8.1 を参照)。
-- 配布ビルドの起動から p95 を読むまでの実測手順を、人間だけで再現できる形で `tasks.md` の Implementation Notes に残す。
+- 配布ビルドの起動から p95 を読むまでの実測手順を、人間だけで再現できる形で `tasks.md` の Implementation Notes に残す。手順は `wails dev` に依存させない(配布ビルドだけで完結させる)。
 
 ### 対象外(やらないこと)
 
+- **`wails dev` でパネルの中身が描画されない不具合の原因確定と修正。** 当初は本 unit の Requirement 4 として含めていたが、原因の確定に WebView のコンソールに最初に出る例外が要り、本セッションのホストは画面もコンソールも読めない。依頼者の判断で別の依頼へ切り出した。切り分けで分かった事実・却下した直し方・人間が集めるべき情報は、別の依頼を担当する次のセッションが読めるよう付録 A と `tasks.md` の付録に残す。
 - **`requestAnimationFrame` のループを 1 本へ共有する変更。** 本 unit が用意する実測の結果を見てから、別 unit として判断する。
 - **`LogStreamPanel` を計測対象に加えること。** このパネルは rAF のループを持たず、記録できるのはログイベントの到着間隔 (80〜400 ms) になるため、フレーム間隔の判定基準に載せられない。`004-metrics-panels` の除外の判断を据え置く。
 - **凍結済みの `001-dashboard-shell`〜`004-metrics-panels` の spec.md の書き換え。** 受け入れ基準 12.5 (production で無効) は本 unit の Requirement 1 が上書きするが、書き換えではなく本書での明示的な差し替えとして扱う。
@@ -31,7 +31,7 @@
 
 ## 3. 前提(未検証の賭け)
 
-- 配布ビルドの WebView (WKWebView) で Web インスペクタを開けること。`wails build -devtools` が production ビルドのまま開発者ツールだけを有効にすることは wails v2.15.0 の `pkg/commands/build/base.go`(`devtools` タグを足すが `debug` は足さない)で確認済み。ただしインスペクタを接続した状態が計測値そのものへ与える影響は評価していない。判定の境目が 16.7 ms 対 20 ms と狭いため、この影響が結論を左右しうる(§8.3 の残る弱点)。
+- 配布ビルドの WebView (WKWebView) で Web インスペクタを開けること。`wails build -devtools` が production ビルドのまま開発者ツールだけを有効にすることは wails v2.15.0 の `pkg/commands/build/base.go`(`devtools` タグを足すが `debug` は足さない)で確認済み。ただしインスペクタを接続した状態が計測値そのものへ与える影響は評価していない。判定の境目が 16.7 ms 対 20 ms と狭いため、この影響が結論を左右しうる(§8.1 の残る弱点)。
 
 ## 4. 用語定義
 
@@ -114,13 +114,9 @@ declare global {
 3.1. 計測の対象 SHALL `commit` / `depgraph` / `gauge` / `scatter` / `timeseries` の 5 パネルである(パネル名は各コンポーネントの `PANEL_NAME` 定数)(`004-metrics-panels` の判断を据え置く)。
 3.2. `LogStreamPanel` SHALL `recordFrame` を呼ばない。
 
-### Requirement 4: `wails dev` のハイドレーション【未達 / 別途の情報待ち】
+### Requirement 4: (欠番)
 
-**ユーザーストーリー**: 開発者として、`wails dev` の画面で 6 パネルの中身を見られることを求める。
-
-4.1. WHEN `wails dev` で起動する THEN 画面 SHALL 6 パネルすべての中身(ログ行・コミットグラフ・折れ線・グラフビュー・タコメータ・3D 散布図)を描画する。
-
-**本 unit ではこの要件を満たせていない。** §8.1 に記すとおり、原因を確定するには WebView のコンソールに最初に出る例外が要る。本セッションのホストは画面を撮れず、そのコンソールを読めない。誤った機序に基づく修正を入れるより、原因を確定してから直すほうが安い(§8.2 で、当初採った `assetPrefix` 案がコード上まったく効かないことが分かったため)。人間が §9 の「D. 原因の切り分け」を実行して情報を返すまで保留する。
+当初は「`wails dev` のハイドレーション(6 パネルの中身が描画されること)」を置いていたが、§2 の対象外に記した理由で別の依頼へ切り出した。番号を詰めないのは、`tasks.md` と最終検証の記録が要件 ID で参照しており、5.x の付け替えで照合の履歴を壊さないため。
 
 ### Requirement 5: 検証手段の成立(非機能)
 
@@ -132,41 +128,7 @@ declare global {
 
 ## 8. 実現方針
 
-### 8.1. `wails dev` の表示不具合の切り分け(原因は未確定)
-
-本セッションで確かめた事実を順に置く。
-
-1. **資産の配信は正常である。** `wails dev` を起動して `http://localhost:34115/` から HTML を取り、参照される 17 本の script/link をすべて取得したところ、全て `200` で `application/javascript` / `text/css` を返した。RSC のペイロード (`self.__next_f`) と `self.__next_r` も HTML に揃っている。**取得の失敗ではなく、取得できた JS の実行側の問題である。**
-2. **ページのオリジンは `wails://wails.localhost:34115` である。** wails v2.15.0 の `internal/frontend/desktop/darwin/frontend.go` は `startURL = "wails://wails/"` を持ち、dev では host に `.localhost` とポートを足す(同ファイル 108〜110 行)。`starturl` を context へ入れる箇所は wails v2.15.0 の全体に存在しない(読み側 3 箇所のみ)。したがって darwin の dev ではこの URL が必ず使われ、scheme は `wails:` で `http:` ではない。
-3. **Next の HMR は必ず `wss://wails.localhost:34115/_next/hmr` へ繋ぎに行く。** `next/dist/client/dev/hot-reloader/get-socket-url.js` の `getSocketProtocol` は、渡された `assetPrefix` が URL として解釈できなければ `window.location.protocol` を見て、`'http:'` でなければ `'wss:'` を選ぶ。そして `assetPrefix` には設定値ではなく `next/dist/client/asset-prefix.js` の `getAssetPrefix()` の戻り値が渡る(`app-bootstrap.js` 53・66 行)。`getAssetPrefix()` は `document.currentScript.src` の **pathname だけ**を見て `/_next/` の手前を返すため、**オリジンは必ず捨てられ、この構成では常に空文字列になる**。依頼者が観測した TLS エラーはこれで説明が付く。
-4. **この WebSocket の生成は `hydrateRoot` より前に走る。** `next/dist/client/app-index.js` の `hydrate()` は `createWebSocket()`(246〜251 行)→ `await initialServerResponse`(253 行)→ `hydrateRoot`(302 行)の順である。ここで同期例外が出れば `hydrateRoot` は 1 度も呼ばれず、6 枠の中身がすべてクライアントコンポーネントである本アプリの画面は枠と見出しだけになる。この見え方と一致する。
-
-**しかし 3 と 4 をつないで「HMR の TLS 失敗がハイドレーションを止めている」と結論することはできない。** `new WebSocket(url)` が同期例外を投げるのは URL の構文不正(SyntaxError)とブロックポート(SecurityError)に限られ、`wss://wails.localhost:34115/_next/hmr` はどちらにも当たらない。TLS の失敗は非同期の error イベントとして届くため、素直に読めば `hydrate()` は素通りして `hydrateRoot` に到達する。中継役の見立て(HMR の TLS 失敗が原因)は、**接続先が `wss://…` になる仕組みまでは裏が取れたが、それがハイドレーションを止める最終段は裏が取れていない。**
-
-開発ビルドにしか無く、かつ `hydrateRoot` より前に走る経路は HMR の WebSocket だけではない。少なくとも次が残っている。
-
-- `web-socket.js:41` の `if (!self.__next_r) throw InvariantError(E806)` — **同期例外を投げうる唯一の現実的な候補**。ただし `:34115` が返す HTML に `self.__next_r` は入っている(1 で確認済み)ため、WebView 側で先に消える経路があるかは未確認。
-- `app-index.js:163-166` の `require('./dev/debug-channel')`(`__NEXT_REACT_DEBUG_CHANNEL` 条件付き)
-- `app-next-turbopack.js` の `require('../lib/require-instrumentation-client')` と `renderAppDevOverlay`
-- `asset-prefix.js` の `getAssetPrefix()` が投げる InvariantError E783 / E784(`document.currentScript` が script 要素でない場合)
-
-**原因を確定するには、WebView のコンソールに最初に出る例外が要る。** 手順は §9 の「D. 原因の切り分け」に置く。
-
-### 8.2. 検討して却下した直し方
-
-| 案 | 内容 | 採否 |
-| :-- | :-- | :-- |
-| A | Wails 側の起動 URL を `http://localhost:3000` にする | 却下。darwin の dev では `starturl` を渡す口が wails v2.15.0 に無い(§8.1 の 2)。また WebView が Next の dev サーバを直接開くと、Wails が注入する `/wails/ipc.js`(`pkg/assetserver/assetserver.go` の `processIndexHTML`)を通らず、`frontend/src/lib/feed.ts` が使う `Snapshot` / `EventsOn` が消える |
-| B | 開発時のみ `assetPrefix` を `http://localhost:3000` にする | **一度採用したが撤回した。** HTML の資産参照は絶対 URL になり、Next 16 の cross-origin 遮断にも当たらない(既定の許可リストに `**.localhost` が含まれ、host は `wails.localhost`)ことを実測で確かめたが、**HMR の接続先はまったく変わらない**。クライアントは `next.config.ts` の値ではなく `getAssetPrefix()` の戻り値(pathname のみ)を使うため(§8.1 の 3)、`getSocketUrl('')` は `window.location` へ落ち、URL は 1 文字も変わらない。効かない変更をポート結合の保守負担ごと残す理由が無いので取り消した |
-| C | HMR を切る | 却下。`next dev` に HMR だけを止める設定は無い(`server/config-schema.js` の `hmr` 関連は `logging.fetches.hmrRefreshes` のみ) |
-| D | 早い段階で `window.WebSocket` を差し替え、`wss://wails.localhost:34115` を `ws://localhost:3000` へ読み替える | 保留。§8.1 の最終段が未確定のまま入れると、効かなかったときに原因の切り分けを 1 段むずかしくする。原因を確定してから判断する |
-
-**撤回した B の実測から残る事実**(次に誰かが assetPrefix を触るときの申し送り):
-
-- `Referer: wails://wails.localhost:34115/` + `Sec-Fetch-Site: cross-site` / `Sec-Fetch-Mode: no-cors` を付けた JS・CSS の取得は `200` を返す。
-- `Origin: wails://wails.localhost:34115` を付けた `ws://localhost:3000/_next/hmr` の handshake は `101 Switching Protocols` を返す。**dev サーバ側は Wails のオリジンからの HMR 接続を受理する。** 詰まっているのはクライアントが繋ぎ先を選ぶところだけである。
-
-### 8.3. 計測の有効化の手段の選択
+### 8.1. 計測の有効化の手段の選択
 
 | 案 | 内容 | 採否 |
 | :-- | :-- | :-- |
@@ -185,7 +147,7 @@ declare global {
 
 `NODE_ENV` による分岐は完全に外す。ビルド種別で挙動が変わらないほうが、開発ビルドで確かめた手順がそのまま配布ビルドで通る。無効時のコストは `recordFrame` の先頭の真偽値 1 個の判定であり、これは分岐を残した場合と変わらない。
 
-### 8.4. 無効化で標本を捨てる理由
+### 8.2. 無効化で標本を捨てる理由
 
 無効の区間を跨いだ `last` を残すと、再度の有効化で「無効だった数十秒」が 1 つの間隔として標本に入り、mean と max が壊れる。有効化のたびに測り直すほうが、判定 (p95 > 20 ms) の意味がはっきりする。
 
@@ -196,4 +158,41 @@ declare global {
 - Requirement 3 は `recordFrame` の呼び出し元の `grep` と各コンポーネントの `PANEL_NAME` で判定する(本セッションで実行済み)。
 - Requirement 2.7 は `wails build` が出力した最小化済み chunk に `window.nullops` の結線が残ることで判定する(本セッションで実行済み)。
 - Requirement 1.1・1.2・2.1〜2.3・2.5 は画面と DevTools のコンソールを要するため **UNVERIFIED** とし、`tasks.md` の Implementation Notes に人間だけで再現できる手順を残す。
-- Requirement 4.1 は **未達**。原因の切り分けに要る情報(WebView のコンソールの最初の例外)を本セッションでは取得できない。手順を `tasks.md` の「D. 原因の切り分け」に残し、結果を受けてから直す。
+
+## 付録 A. `wails dev` の表示不具合の原因分析(別の依頼への申し送り)
+
+本 unit の範囲外(§2)。別の依頼を担当する次のセッションが再発見に時間を使わないよう、切り分けで確かめた事実と却下した直し方をそのまま残す。人間が実機で集めるべき情報の手順は `tasks.md` の付録「原因の切り分け」にある。
+
+### A.1. 切り分けで確かめた事実(原因は未確定)
+
+本セッションで確かめた事実を順に置く。
+
+1. **資産の配信は正常である。** `wails dev` を起動して `http://localhost:34115/` から HTML を取り、参照される 17 本の script/link をすべて取得したところ、全て `200` で `application/javascript` / `text/css` を返した。RSC のペイロード (`self.__next_f`) と `self.__next_r` も HTML に揃っている。**取得の失敗ではなく、取得できた JS の実行側の問題である。**
+2. **ページのオリジンは `wails://wails.localhost:34115` である。** wails v2.15.0 の `internal/frontend/desktop/darwin/frontend.go` は `startURL = "wails://wails/"` を持ち、dev では host に `.localhost` とポートを足す(同ファイル 108〜110 行)。`starturl` を context へ入れる箇所は wails v2.15.0 の全体に存在しない(読み側 3 箇所のみ)。したがって darwin の dev ではこの URL が必ず使われ、scheme は `wails:` で `http:` ではない。
+3. **Next の HMR は必ず `wss://wails.localhost:34115/_next/hmr` へ繋ぎに行く。** `next/dist/client/dev/hot-reloader/get-socket-url.js` の `getSocketProtocol` は、渡された `assetPrefix` が URL として解釈できなければ `window.location.protocol` を見て、`'http:'` でなければ `'wss:'` を選ぶ。そして `assetPrefix` には設定値ではなく `next/dist/client/asset-prefix.js` の `getAssetPrefix()` の戻り値が渡る(`app-bootstrap.js` 53・66 行)。`getAssetPrefix()` は `document.currentScript.src` の **pathname だけ**を見て `/_next/` の手前を返すため、**オリジンは必ず捨てられ、この構成では常に空文字列になる**。依頼者が観測した TLS エラーはこれで説明が付く。
+4. **この WebSocket の生成は `hydrateRoot` より前に走る。** `next/dist/client/app-index.js` の `hydrate()` は `createWebSocket()`(246〜251 行)→ `await initialServerResponse`(253 行)→ `hydrateRoot`(302 行)の順である。ここで同期例外が出れば `hydrateRoot` は 1 度も呼ばれず、6 枠の中身がすべてクライアントコンポーネントである本アプリの画面は枠と見出しだけになる。この見え方と一致する。
+
+**しかし 3 と 4 をつないで「HMR の TLS 失敗がハイドレーションを止めている」と結論することはできない。** `new WebSocket(url)` が同期例外を投げるのは URL の構文不正(SyntaxError)とブロックポート(SecurityError)に限られ、`wss://wails.localhost:34115/_next/hmr` はどちらにも当たらない。TLS の失敗は非同期の error イベントとして届くため、素直に読めば `hydrate()` は素通りして `hydrateRoot` に到達する。中継役の見立て(HMR の TLS 失敗が原因)は、**接続先が `wss://…` になる仕組みまでは裏が取れたが、それがハイドレーションを止める最終段は裏が取れていない。**
+
+開発ビルドにしか無く、かつ `hydrateRoot` より前に走る経路は HMR の WebSocket だけではない。少なくとも次が残っている。
+
+- `web-socket.js:41` の `if (!self.__next_r) throw InvariantError(E806)` — **同期例外を投げうる唯一の現実的な候補**。ただし `:34115` が返す HTML に `self.__next_r` は入っている(1 で確認済み)ため、WebView 側で先に消える経路があるかは未確認。
+- `app-index.js:163-166` の `require('./dev/debug-channel')`(`__NEXT_REACT_DEBUG_CHANNEL` 条件付き)
+- `app-next-turbopack.js` の `require('../lib/require-instrumentation-client')` と `renderAppDevOverlay`
+- `asset-prefix.js` の `getAssetPrefix()` が投げる InvariantError E783 / E784(`document.currentScript` が script 要素でない場合)
+
+**原因を確定するには、WebView のコンソールに最初に出る例外が要る。** 人間が実機で集めるための手順は `tasks.md` の付録「原因の切り分け」に置く。
+
+### A.2. 検討して却下した直し方
+
+| 案 | 内容 | 採否 |
+| :-- | :-- | :-- |
+| A | Wails 側の起動 URL を `http://localhost:3000` にする | 却下。darwin の dev では `starturl` を渡す口が wails v2.15.0 に無い(A.1 の 2)。また WebView が Next の dev サーバを直接開くと、Wails が注入する `/wails/ipc.js`(`pkg/assetserver/assetserver.go` の `processIndexHTML`)を通らず、`frontend/src/lib/feed.ts` が使う `Snapshot` / `EventsOn` が消える |
+| B | 開発時のみ `assetPrefix` を `http://localhost:3000` にする | **一度採用したが撤回した。** HTML の資産参照は絶対 URL になり、Next 16 の cross-origin 遮断にも当たらない(既定の許可リストに `**.localhost` が含まれ、host は `wails.localhost`)ことを実測で確かめたが、**HMR の接続先はまったく変わらない**。クライアントは `next.config.ts` の値ではなく `getAssetPrefix()` の戻り値(pathname のみ)を使うため(A.1 の 3)、`getSocketUrl('')` は `window.location` へ落ち、URL は 1 文字も変わらない。効かない変更をポート結合の保守負担ごと残す理由が無いので取り消した |
+| C | HMR を切る | 却下。`next dev` に HMR だけを止める設定は無い(`server/config-schema.js` の `hmr` 関連は `logging.fetches.hmrRefreshes` のみ) |
+| D | 早い段階で `window.WebSocket` を差し替え、`wss://wails.localhost:34115` を `ws://localhost:3000` へ読み替える | 保留。A.1 の最終段が未確定のまま入れると、効かなかったときに原因の切り分けを 1 段むずかしくする。原因を確定してから判断する |
+
+**撤回した B の実測から残る事実**(次に誰かが assetPrefix を触るときの申し送り):
+
+- `Referer: wails://wails.localhost:34115/` + `Sec-Fetch-Site: cross-site` / `Sec-Fetch-Mode: no-cors` を付けた JS・CSS の取得は `200` を返す。
+- `Origin: wails://wails.localhost:34115` を付けた `ws://localhost:3000/_next/hmr` の handshake は `101 Switching Protocols` を返す。**dev サーバ側は Wails のオリジンからの HMR 接続を受理する。** 詰まっているのはクライアントが繋ぎ先を選ぶところだけである。

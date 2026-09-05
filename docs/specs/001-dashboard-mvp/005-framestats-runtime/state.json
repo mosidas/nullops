@@ -1,11 +1,15 @@
 {
   "workflow": "sdd",
   "unit": "framestats-runtime",
-  "state": "implementing",
+  "state": "completed",
   "approvals": {
     "spec": true,
     "tasks": true
   },
   "created": "2026-09-05",
-  "updated": "2026-09-05"
+  "updated": "2026-09-05",
+  "frozen": {
+    "spec.md": "a45fddc44527eb70fc97526aa901dd63684c7c5a03f90d1241ce9d5f6488e7d4",
+    "tasks.md": "14f342b4ec19645f0aefd8bcf0e9af3638ea47a269dd02533044f6e03557058a"
+  }
 }

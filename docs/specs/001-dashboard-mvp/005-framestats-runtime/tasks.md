@@ -71,7 +71,7 @@
 
 配布ビルドの WebView で Web インスペクタを開くには、開発者ツールを有効にしてビルドする必要がある。`wails build` の `-devtools` は production ビルドのまま開発者ツールだけを有効にする(wails v2.15.0 の `pkg/commands/build/base.go` が `devtools` タグを足し、`debug` タグは足さない)。`-debug` は Go 側もデバッグ構成に変えてしまうため使わない。
 
-1. 作業ツリーのルートへ移動する。前提は wails CLI と Xcode コマンドラインツールが入っていること(`CLAUDE.md` の「開発コマンド」と同じ)。`npm ci` は `wails build` が `wails.json` の `frontend:install` で回すため、別途は要らない。
+1. 作業ツリーのルートへ移動する。前提は wails CLI と Xcode コマンドラインツールが入っていること(`CLAUDE.md` の「開発コマンド」と同じ)。依存の取得は `wails build` が `wails.json` の `frontend:install`(`npm install`)で回すため、別途は要らない。`npm install` は `package-lock.json` を書き換えうるので、終了後に `git status` を確認する。
 2. `wails build -devtools` を実行する。生成物は `build/bin/nullops.app`。
    - **`-devtools` を付けないビルドでは Web インスペクタを開けず、計測結果を読めない。**
    - `-devtools` は Next.js のビルドを変えない(`wails.json` の `frontend:build` は `npm run build` のままで、React Strict Mode の二重描画も最小化の有無も配布ビルドと同じ)。したがってここで得た数値は配布ビルドの数値として扱ってよい。
@@ -96,7 +96,7 @@
 9. **判定**: `[framestats]` の行のうち**最後の 6 行(30 秒ぶん)**を記録する。その 6 行すべてで、**同じパネルの `p95` が 20 ms を超えている**なら、rAF のループを 1 本へ共有する検討へ進む。1 行でも 20 ms 未満に戻るパネルは「継続して超えている」とは見なさない。
    - 20 ms は 60 Hz の 1 フレーム (16.7 ms) に対して 1 枚落ちが常態化していないかの境目である(`004-metrics-panels` spec.md §9.3)。判定の回数の数え方は同 §9.2 に揃えた。
    - **境目付近(18〜22 ms)に出た場合は、そのまま結論にしない。** Web インスペクタを接続した状態が計測値へ与える影響を評価していないため(spec.md §8.1 の案 E)。その旨を添えて報告してほしい。
-10. 途中で読みたくなったら `nullops.frameReport()` を実行する。5 秒の周期を待たずにその時点の 1 行が返る(有効化した直後で `recordFrame` が 1 度も走っていなければ `[framestats] no samples`、1 フレームでも走っていれば各パネル `n=0` の行が返る)。無効化を確かめるには `nullops.disableFrameStats()` を実行し、次の 3 つを観測する(要件 2.5): (a) 直後に `[framestats] disabled` の 1 行が出る、(b) 以降 5 秒ごとの報告行が止まる、(c) `nullops.frameReport()` が `[framestats] disabled` を返す。測り直すときはそのまま `nullops.enableFrameStats()` を実行し、`n` が小さい値から積み直すことを見る(標本が捨てられた証拠)。
+10. 途中で読みたくなったら `nullops.frameReport()` を実行する。5 秒の周期を待たずにその時点の 1 行が返る(有効化した直後で `recordFrame` が 1 度も走っていなければ `[framestats] no samples`、`recordFrame` が走り始めていれば各パネルの `n` が積み上がった行が返る。`n=0` の行は有効化直後の 1 フレームぶんの窓でしか出ないので、見られなくても異常ではない)。無効化を確かめるには `nullops.disableFrameStats()` を実行し、次の 3 つを観測する(要件 2.5): (a) 直後に `[framestats] disabled` の 1 行が出る、(b) 以降 5 秒ごとの報告行が止まる、(c) `nullops.frameReport()` が `[framestats] disabled` を返す。測り直すときはそのまま `nullops.enableFrameStats()` を実行し、`n` が小さい値から積み直すことを見る(標本が捨てられた証拠)。
 11. 読んだ数値は本書ではなく issue のログへ残す(依頼者の指示)。
 
 ### 本セッションで実行した検証コマンドと結果
@@ -140,12 +140,12 @@
 
 | 観点 | 判定 | 主な指摘 | 対応 |
 | :-- | :-- | :-- | :-- |
-| 仕様適合(requirements-conformance) | NO-GO → 再投入で GO(下記) | `state.json` に範囲縮小前の手書き `blocked` が残り、存在しない節「D. 原因の切り分け」を参照していた(Critical) | エンジンのスキーマに無いキーを取り除いた。経緯は本書の付録に一本化 |
+| 仕様適合(requirements-conformance) | 1 体目 NO-GO。対応後に同観点を再投入し GO(残った指摘は Nit 5 件で、すべて本書へ反映した) | `state.json` に範囲縮小前の手書き `blocked` が残り、存在しない節「D. 原因の切り分け」を参照していた(Critical) | エンジンのスキーマに無いキーを取り除いた。経緯は本書の付録に一本化 |
 | 仕様適合 | 同上 | 「次節」の参照先が無い・節記号 B が単独(Nit) | 参照先を明示し、B の由来を 1 行足した |
 | 規約と構造(structure + CLAUDE.md) | GO | `frameReport` の export 理由のコメントが本 unit の変更で陳腐化(Nit) | コメントを書き直した |
 | 規約と構造 | GO | `window.nullops ?? {}` は先客がオブジェクト以外のとき TypeError になる(Nit) | **見送り。** spec.md §5.2 が「既存の値があれば上書きせず載せる」を明文で要求しており、書く主体は本モジュールだけ(grep で他に無い)。実現しうる状態は `undefined` かオブジェクトのみで現行で正しく動く。条件を足すと仕様の変更になる |
 | 規約と構造 | GO | `setFrameStatsEnabled` は export されているが import 元が無い(FYI) | 見送り。spec.md §5.1 が公開 API として宣言している |
-| 規約と構造 | GO | `samples.shift()` が毎フレーム O(n)(観点外の FYI) | 見送り。004 からの据え置きで本 unit の変更行ではない。実測で計測器自身の負荷が疑われたら別 unit で扱う(下の「残った懸念」) |
+| 規約と構造 | GO | `samples.shift()` が毎フレーム O(n)(観点外の FYI) | 見送り。004 からの据え置きで本 unit の変更行ではない。実測で計測器自身の負荷が疑われたら別 unit で扱う(下の「残った懸念」節) |
 | 手順の再現性 | GO | B.10 の `no samples` の条件が厳密でない / 2.5 の期待観測が薄い / Safari アタッチは `isInspectable` 未設定で現れない可能性 / 004 §9.2 の「最大化して繰り返す」を引き継いでいない / 前提ツールの明記が無い / 付録 2 に汚染のクリーンアップが無い(いずれも Nit・FYI) | すべて手順へ反映した |
 
 ### 最終検証の照合(要件 ID → 照合した対象 → 立証の手段)
@@ -153,7 +153,7 @@
 | ID | 照合した対象 | 立証の手段 | 観点 |
 | :-- | :-- | :-- | :-- |
 | 1.1 | `framestats.ts` の `let enabled = false` と `recordFrame` 先頭の早期 return。有効化の呼び出し元が `setFrameStatsEnabled` 以外に無い | 静的な読み合わせ + grep。実機は人間の手順 B.5 | 仕様適合 |
-| 1.2 | `console.info` の到達点 3 箇所がいずれも無効時に到達しない | 静的な読み合わせ。実機は B.5 | 仕様適合 |
+| 1.2 | `console.info` の到達点 3 箇所が、起動後に何も操作しなければいずれも到達しない(2 箇所はコンソールからの明示呼び出しでのみ到達) | 静的な読み合わせ。実機は B.5 | 仕様適合 |
 | 1.3 | `process.env` の出現がコメントのみ。production chunk にフラグ判定が残る | grep + 配布ビルド chunk の grep ログ | 仕様適合 |
 | 1.4 | 標本追加・`last` 更新・報告のいずれよりも前に return | 読み合わせ | 仕様適合 |
 | 2.1 | `enableFrameStatsFromConsole` → `setFrameStatsEnabled(true)` → 以降の `recordFrame` が積む | 読み合わせ。実機は B.6〜8 | 仕様適合 |
@@ -175,6 +175,13 @@
 | :-- | :-- | :-- |
 | spec.md §5.1 の宣言は `setFrameStatsEnabled(enabled: boolean)`、実装の仮引数は `next` | 実装が正しい(モジュール変数 `enabled` とのシャドウを避ける)。位置引数なので契約に影響しない | 局所的な命名のため恒久情報へは置かない。次に framestats.ts を触る unit がシグネチャを写すときに `next` を採る |
 | spec.md 2.2 は 1 パネルぶんの断片で書かれ、実装は `|` 区切りで 5 パネルを 1 行に連結する | 記述の粒度差で齟齬ではない(004 spec §9.1 と本書 B.8 が連結形を示す) | 本書 B.8 の例で足りる |
+
+### 残った懸念
+
+- **観測系の影響。** Web インスペクタを接続した状態で測るため、計測値がその影響を含む。p95 が境目付近(18〜22 ms)に出たら結論にせず、spec.md §8.1 の案 E(Go 側へ報告を送る)を別 unit として検討する。
+- **計測器自身の負荷。** `samples.shift()` は 600 要素の配列に対して毎フレーム O(n) で、004 からの据え置き。本 unit で配布ビルドでも有効化できるようになったため、実測で計測器自身の負荷が疑われたらリングバッファ化を別 unit で扱う。
+- **最大化時の値。** 004 spec.md §9.2 の「最大化して繰り返す」を必須にしていない。rAF ループ共有の要否(004 受け入れ基準 12.6)を結論づける段では、最大化時の値が欠けていないかを意識する。
+- **Web インスペクタの開き方は実機未確認。** ⌘⇧F12 と Safari のアタッチのどちらで開けたかを人間の報告で確定させる。
 
 ## 付録: `wails dev` の表示不具合(別の依頼への申し送り)
 

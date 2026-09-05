@@ -172,8 +172,8 @@ function disableFrameStatsFromConsole(): void {
   console.info('[framestats] disabled');
 }
 
-// サーバ側の描画では window が無い。既存の window.nullops を置き換えず
-// プロパティを足すのは、他の口を後から同じ名前空間へ載せられるようにするため。
+// サーバ側の描画では window が無い。既存の window.nullops を丸ごと置き換えず
+// プロパティだけを足すのは、同じ名前空間に先客がいた場合にそれを壊さないため。
 if (typeof window !== 'undefined') {
   const api: Partial<NullopsConsoleApi> = window.nullops ?? {};
   api.enableFrameStats = enableFrameStatsFromConsole;

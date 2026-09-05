@@ -48,12 +48,12 @@
 export function recordFrame(panel: string, now: number): void;
 export function frameReport(): string;
 export function setFrameStatsEnabled(enabled: boolean): void;
-export function isFrameStatsEnabled(): boolean;
 ```
 
 - `setFrameStatsEnabled(true)`: 計測を有効にする。呼び出し以降の `recordFrame` が記録を積み、5 秒ごとの報告が出る。
 - `setFrameStatsEnabled(false)`: 計測を無効にする。以降の `recordFrame` は何もしない。**貯めた標本は捨てる**(有効化した区間だけを測るため。無効な区間を跨いだ間隔が標本に混じると mean と max が壊れる)。
-- `isFrameStatsEnabled()`: 現在の有効・無効を返す。
+
+有効・無効を読み出す関数は置かない。有効化したかどうかは `enableFrameStats()` が出す `[framestats] enabled` の 1 行と、無効時に `frameReport()` が返す `[framestats] disabled` で分かるため、別の口を足す理由が無い（YAGNI）。
 - `recordFrame` / `frameReport` のシグネチャと意味は既存のまま変えない。
 
 いずれも事前条件を持たず、例外を投げない。
@@ -183,7 +183,7 @@ assetPrefix: process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 
 - **C を却下する理由**: 配布ビルドのウィンドウにアドレスバーが無い。ページのオリジンは `wails://wails/` で、URL を人間が打ち込む手段が無いため、そもそも使えない。
 - **B を却下する理由**: `localStorage` へ書くにも結局 DevTools のコンソールが要る。そのうえ (1) 書いた後にリロードが必要で手順が 1 段増え、(2) フラグが残るため次回以降の起動でも黙って計測が走り、「何もしなければ計測は動かない」を破る。
 - **D を却下する理由**: キーハンドラを常時登録する必要があり、既定で無効という目的に対して常時の負荷と実装が増える。押した合図を画面に出せない(擬似ダッシュボードに本物の UI を混ぜない方針)ため、有効になったかを人間が確かめられない。
-- **A を採る理由**: 報告の読み先がそもそも DevTools のコンソールなので、有効化も同じ場所で完結し、手順が最短になる。リロードを挟まないので、有効化の前後で同じ画面の状態を測れる。戻り値と `isFrameStatsEnabled()` でその場で状態を確認できる。何も残らないので、次回の起動は必ず無効から始まる。
+- **A を採る理由**: 報告の読み先がそもそも DevTools のコンソールなので、有効化も同じ場所で完結し、手順が最短になる。リロードを挟まないので、有効化の前後で同じ画面の状態を測れる。有効化したことが `[framestats] enabled` の 1 行で分かる。何も残らないので、次回の起動は必ず無効から始まる。
 
 `NODE_ENV` による分岐は完全に外す。ビルド種別で挙動が変わらないほうが、開発ビルドで確かめた手順がそのまま配布ビルドで通る。無効時のコストは `recordFrame` の先頭の真偽値 1 個の判定であり、これは分岐を残した場合と変わらない。
 

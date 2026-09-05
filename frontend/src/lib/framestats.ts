@@ -29,13 +29,15 @@ type PanelStats = {
 };
 
 /**
- * 計測が有効かどうか。
+ * 計測が有効かどうか。既定は無効（005-framestats-runtime spec.md 受け入れ基準 1.1〜1.3）。
  *
- * 配布ビルドへ計測の負荷を持ち込まないため、production では無効にする
- * （受け入れ基準 12.5）。モジュールの読み込み時に 1 度だけ判定するのは、
- * 毎フレーム process.env を読まないため。
+ * ビルド種別（process.env.NODE_ENV）で分岐しない。判定したいのは配布ビルドの
+ * フレーム間隔であり、開発ビルドは React Strict Mode の二重描画と最小化なしの
+ * JS のぶんだけ悪い値が出て判断材料にならないため、配布ビルドでも有効に
+ * できる必要がある。分岐を残さないのは、開発ビルドで確かめた手順が
+ * そのまま配布ビルドで通るようにするため。
  */
-const enabled = process.env.NODE_ENV !== 'production';
+let enabled = false;
 
 /**
  * パネル名ごとの計測状態。
@@ -121,4 +123,61 @@ export function frameReport(): string {
     parts.push(`${panel} n=${sorted.length} mean=${mean.toFixed(1)} p95=${p95.toFixed(1)} max=${max.toFixed(1)}`);
   }
   return `[framestats] ${parts.join(' | ')}`;
+}
+
+/**
+ * 計測の有効・無効を切り替える（005-framestats-runtime spec.md §5.1）。
+ *
+ * 無効にするときに標本と報告の時刻を捨てるのは、無効だった区間を跨いだ
+ * 間隔が次の測定に混じると mean と max が壊れるため。有効化のたびに
+ * 測り直すほうが p95 > 20 ms という判定の意味がはっきりする。
+ */
+export function setFrameStatsEnabled(next: boolean): void {
+  if (next === enabled) {
+    return;
+  }
+  enabled = next;
+  stats.clear();
+  lastReportAt = 0;
+}
+
+/**
+ * DevTools のコンソールから計測を操作するための口（005-framestats-runtime spec.md §5.2）。
+ *
+ * 配布ビルドのウィンドウにはアドレスバーが無く URL のクエリを打てない。
+ * localStorage のフラグはリロードを要するうえ次回の起動にも残り、
+ * 「何もしなければ計測は動かない」を破る。報告の読み先がそもそも
+ * コンソールなので、有効化も同じ場所で完結させる。
+ */
+type NullopsConsoleApi = {
+  enableFrameStats(): void;
+  disableFrameStats(): void;
+  frameReport(): string;
+};
+
+declare global {
+  interface Window {
+    nullops?: Partial<NullopsConsoleApi>;
+  }
+}
+
+/** 有効化したことを人間がコンソールで確かめられるよう、戻り値ではなく 1 行を出す。 */
+function enableFrameStatsFromConsole(): void {
+  setFrameStatsEnabled(true);
+  console.info('[framestats] enabled');
+}
+
+function disableFrameStatsFromConsole(): void {
+  setFrameStatsEnabled(false);
+  console.info('[framestats] disabled');
+}
+
+// サーバ側の描画では window が無い。既存の window.nullops を置き換えず
+// プロパティを足すのは、他の口を後から同じ名前空間へ載せられるようにするため。
+if (typeof window !== 'undefined') {
+  const api: Partial<NullopsConsoleApi> = window.nullops ?? {};
+  api.enableFrameStats = enableFrameStatsFromConsole;
+  api.disableFrameStats = disableFrameStatsFromConsole;
+  api.frameReport = frameReport;
+  window.nullops = api;
 }

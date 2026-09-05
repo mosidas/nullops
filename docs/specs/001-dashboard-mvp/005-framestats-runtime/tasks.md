@@ -44,7 +44,7 @@
 - [x] 2. 計測器の実行時トグルと `window` の操作口
   - 要件: 1.1 / 1.2 / 1.3 / 1.4 / 2.1〜2.7 / 3.1 / 3.2
   - 対象: `frontend/src/lib/framestats.ts`
-  - 内容: `const enabled = process.env.NODE_ENV !== 'production'` を可変フラグ(初期値 `false`)へ置き換え、`setFrameStatsEnabled` / `isFrameStatsEnabled` を足す。無効化時に標本と `lastReportAt` を捨てる。`window.nullops` へ `enableFrameStats` / `disableFrameStats` / `frameReport` を載せる。`any` を使わずグローバルの型を宣言する。
+  - 内容: `const enabled = process.env.NODE_ENV !== 'production'` を可変フラグ(初期値 `false`)へ置き換え、`setFrameStatsEnabled` を足す。無効化時に標本と `lastReportAt` を捨てる。`window.nullops` へ `enableFrameStats` / `disableFrameStats` / `frameReport` を載せる。`any` を使わずグローバルの型を宣言する。
   - 検証: `cd frontend && npm run lint`。`grep` で `recordFrame` の呼び出し元が 5 パネルのままであること。
   - 依存: なし(タスク 1 と並行可)
 - [x] 3. 検証コマンドの通し実行と実測手順の記載
@@ -70,7 +70,7 @@
 
 ### A. `wails dev` の確認(所要 3 分)
 
-1. `cd ~/repos/worktrees/nullops-framestats && wails dev` を実行する。
+1. 作業ツリーのルートで `wails dev` を実行する。
 2. 起動したウィンドウで 6 枠すべてに中身が出ることを見る。期待は、左上から順に「英語のログ行が流れる」「コミットグラフの点と線」「折れ線」「グラフビューのノードとエッジ」「タコメータの針」「3D 散布図の点群が回る」。枠線と見出しだけなら **失敗** である。
 3. ウィンドウを右クリック → `Inspect Element` で Web インスペクタを開く。
 4. Console タブに `wss://wails.localhost:34115/_next/hmr` を含む行が **無い** こと、代わりに `[HMR] connected` が出ていることを見る。
@@ -78,12 +78,12 @@
 
 ### B. 配布ビルドでの実測(所要 5 分)
 
-配布ビルドの WebView で Web インスペクタを開くには、開発者ツールを含めてビルドする必要がある。`-tags dev` ではなく `-debug` を使う(コードは同一で、インスペクタの有効化だけが変わる)。
+配布ビルドの WebView で Web インスペクタを開くには、開発者ツールを有効にしてビルドする必要がある。`wails build` には `-devtools`(production ビルドのまま開発者ツールだけを有効にする)がある。`-debug` ではなくこちらを使う。
 
-1. `cd ~/repos/worktrees/nullops-framestats`
-2. `wails build -debug` を実行する。生成物は `build/bin/nullops.app`。
-   - **`-debug` を付けないビルドでは Web インスペクタを開けず、計測結果を読めない。**
-   - `-debug` は Next.js の production ビルドを変えない(`frontend:build` は `npm run build` のままであり、React Strict Mode の二重描画も最小化の有無も配布ビルドと同じ)。したがってここで得た数値は配布ビルドの数値として扱ってよい。
+1. `cd <この作業ツリー>`
+2. `wails build -devtools` を実行する。生成物は `build/bin/nullops.app`。
+   - **`-devtools` を付けないビルドでは Web インスペクタを開けず、計測結果を読めない。**
+   - `-devtools` は Next.js のビルドを変えない(`frontend:build` は `npm run build` のままであり、React Strict Mode の二重描画も最小化の有無も配布ビルドと同じ)。したがってここで得た数値は配布ビルドの数値として扱ってよい。`-debug` を使うと Go 側もデバッグ構成になるため、計測には `-devtools` を選ぶ。
 3. `open build/bin/nullops.app` で起動する。6 パネルが描画され、動き続けることを見る。
 4. ウィンドウを右クリック → `Inspect Element` で Web インスペクタを開き、Console タブを選ぶ。**この時点でコンソールに `[framestats]` の行が出ていないこと**を確認する(要件 1.1・1.2。既定で無効であることの確認)。
 5. コンソールへ `nullops.enableFrameStats()` と打って実行する。
@@ -102,7 +102,22 @@
 
 ### 本セッションで実行した検証コマンドと結果
 
-タスク 3 の完了時に追記する。
+| コマンド | 結果 |
+| :-- | :-- |
+| `cd frontend && npm ci` | 成功(`found 0 vulnerabilities`) |
+| `go vet ./...` | 終了コード 0(要件 5.1) |
+| `go test ./...` | `ok nullops` / `ok nullops/feed`(要件 5.2) |
+| `cd frontend && npm run lint` | `Checked 22 files. No fixes applied.`(要件 5.3) |
+| `cd frontend && npx tsc --noEmit` | 終了コード 0 |
+| `wails build` | 終了コード 0(要件 5.4) |
+
+コマンド以外に実測した内容:
+
+- **要件 4.3**: `wails dev` を起動して `curl http://localhost:34115/` した HTML の `/_next/` 配下の参照が、修正前は `/_next/static/chunks/...`(相対)、修正後は `http://localhost:3000/_next/static/chunks/...`(絶対)になった。`/wails/ipc.js` の注入と `self.__next_f` / `self.__next_r` は修正後も残っている。
+- **要件 4.4**: `wails build` 後の `frontend/dist/index.html` に `localhost:3000` が 0 件で、資産の参照はすべて `/_next/...` の相対パスのままだった。
+- **要件 2.7**: `wails build` が出力した production の chunk に `window.nullops={enableFrameStats,disableFrameStats,frameReport}` の結線が残っていることを確認した(最小化後のコードを `grep` で確認)。
+- **修正前の切り分け**: `wails dev` の HTML が参照する 17 本の script/link をすべて `http://localhost:34115` 経由で取得し、全て `200` を返した。取得の失敗ではない。
+- **cross-origin の遮断が起きないこと**: `Referer: wails://wails.localhost:34115/` + `Sec-Fetch-Site: cross-site` / `Sec-Fetch-Mode: no-cors` を付けた JS・CSS の取得がいずれも `200`、`Origin: wails://wails.localhost:34115` を付けた `ws://localhost:3000/_next/hmr` の handshake が `101 Switching Protocols` だった。
 
 ### 原因特定で実測した内容(タスク 1)
 

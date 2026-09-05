@@ -37,15 +37,18 @@
 当初のタスク 1(`wails dev` のハイドレーション不具合の原因特定と修正)は、依頼者の判断で本 unit の範囲から外した(2026-09-05。spec.md §2 の対象外)。進んだところ・進まなかったところの記録は下の付録に残す。番号 2・3 を詰めないのは、最終検証の記録がタスク番号で参照しているため。
 
 - [x] 2. 計測器の実行時トグルと `window` の操作口
-  - 要件: 1.1 / 1.2 / 1.3 / 1.4 / 2.1〜2.7 / 3.1 / 3.2
-  - 対象: `frontend/src/lib/framestats.ts`
+  _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2_
+  _Boundary: framestats_
+  - 対象ファイル: `frontend/src/lib/framestats.ts`(変更)
   - 内容: `const enabled = process.env.NODE_ENV !== 'production'` を可変フラグ(初期値 `false`)へ置き換え、`setFrameStatsEnabled` を足す。無効化時に標本と `lastReportAt` を捨てる。`window.nullops` へ `enableFrameStats` / `disableFrameStats` / `frameReport` を載せる。`any` を使わずグローバルの型を宣言する。
-  - 検証: `cd frontend && npm run lint`。`grep` で `recordFrame` の呼び出し元が 5 パネルのままであること。
+  - 検証コマンド: `cd frontend && npm run lint`。`grep -rn "recordFrame(" frontend/src --include="*.tsx"` で呼び出し元が 5 パネルのままであること。
   - 依存: なし
 - [x] 3. 検証コマンドの通し実行と実測手順の記載
-  - 要件: 5.1 / 5.2 / 5.3 / 5.4 / 5.5
-  - 対象: 本書の Implementation Notes
+  _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+  _Boundary: docs_
+  - 対象ファイル: 本書の Implementation Notes(`docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md`)
   - 内容: `go vet ./...`・`go test ./...`・`cd frontend && npm run lint`・`wails build` を通す。人間だけで再現できる実測手順を残す。
+  - 検証コマンド: `cd frontend && npm ci && wails build && go vet ./... && go test ./... && (cd frontend && npm run lint)`
   - 依存: 2
 
 ## Implementation Notes

@@ -73,8 +73,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 対象ファイル: `frontend/src/lib/orbit.ts`(新規), `frontend/src/lib/orbit.test.ts`(新規), `frontend/package.json`(変更), `frontend/tsconfig.json`(変更)
     - 仕様参照: spec.md §5.2 視点の状態機械, §5.4 テストの実行コマンド, §6.1 `Orbit`, §3 前提 2・3・7, Requirement 2・3
     - 検証コマンド: `(cd frontend && npm test)` が終了コード 0 で全テスト成功 / `(cd frontend && npm run lint)` / `(cd frontend && npx tsc --noEmit)` が終了コード 0 / `grep -nE "wailsjs|react|document|window" frontend/src/lib/orbit.ts frontend/src/lib/orbit.test.ts` が 0 件(§5.4 事前条件) / `grep -cE "SCATTER_PITCH\s*=" frontend/src/lib/orbit.ts` が 0(二重定義なし)かつ `grep -n "from './project.ts'" frontend/src/lib/orbit.ts` が 1 件 / `grep -nE "\bnew\b|=>|\[\]|\{\s*\}" frontend/src/lib/orbit.ts` の該当が関数本体に無いこと(9.4 の静的側。型注釈・`createOrbit` の戻り値は除く) / 前提 7 が成立しない事象(`npm test` が import 解決以外の理由で失敗する)が出たら `_Blocked:` を立てて停止する
-- [ ] 2. (P) 軸線の幾何と `projectPoint` の引数型の拡張
-  - [ ] 2.1 `frontend/src/lib/axes.ts` に spec.md §6.2 の `Vec3`・`Segment`・`AXIS_SEGMENTS`(`axis` 3 本・`edge` 12 本、モジュール定数、`readonly`)を新設し、`frontend/src/lib/axes.test.ts` で本数・種別の内訳・全端点が `[-1, 1]`・`axis` の 3 本が §6.2 の端点・`edge` の端点が ±1 の組・15 本に重複が無いことを検証する。`project.ts` の `projectPoint` の第 1 引数の型を `Vec3`(`./axes.ts` から `import type`)へ広げ、`import type { main }` を外す。計算・戻り値・`SCATTER_PITCH`・`FOCAL`・`FILL` は変えない
+- [x] 2. (P) 軸線の幾何と `projectPoint` の引数型の拡張
+  - [x] 2.1 `frontend/src/lib/axes.ts` に spec.md §6.2 の `Vec3`・`Segment`・`AXIS_SEGMENTS`(`axis` 3 本・`edge` 12 本、モジュール定数、`readonly`)を新設し、`frontend/src/lib/axes.test.ts` で本数・種別の内訳・全端点が `[-1, 1]`・`axis` の 3 本が §6.2 の端点・`edge` の端点が ±1 の組・15 本に重複が無いことを検証する。`project.ts` の `projectPoint` の第 1 引数の型を `Vec3`(`./axes.ts` から `import type`)へ広げ、`import type { main }` を外す。計算・戻り値・`SCATTER_PITCH`・`FOCAL`・`FILL` は変えない
     _Requirements: 4.1, 4.2, 5.3, 8.2, 9.2_
     _Boundary: Axes / project_
     _Interfaces: Produces `export type Vec3`, `export type Segment`, `export const AXIS_SEGMENTS: readonly Segment[]`(長さ 15)/ Changes `projectPoint(p: Vec3, yaw, pitch, view): Projected`(既存の `ScatterPoint` の呼び出しは互換)_

@@ -1,11 +1,15 @@
 {
   "workflow": "sdd",
   "unit": "scatter3d-pointcloud",
-  "state": "implementing",
+  "state": "completed",
   "approvals": {
     "spec": true,
     "tasks": true
   },
   "created": "2026-09-06",
-  "updated": "2026-09-06"
+  "updated": "2026-09-06",
+  "frozen": {
+    "spec.md": "c6502f4f8517e23944c2eb7170e68da6574f50a83dec9bce5772925b26a898f2",
+    "tasks.md": "21b15046ae0dc87afbfe3c93d4a331e0c37bdc2d81335e7e7add948398f98e23"
+  }
 }

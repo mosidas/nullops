@@ -16,6 +16,15 @@
   --color-accent-gauge: #ff9e64;
   --color-accent-scatter: #ff7eb6;
 
+  /* 3D 散布図のカラーマップの停止色。地形は色相を時間で回すため、彩度の高い 3 色にする。 */
+  --color-scatter-terrain-low: #2f6df6;
+  --color-scatter-terrain-mid: #3fd6c8;
+  --color-scatter-terrain-high: #f2e14a;
+  --color-scatter-sphere-low: #4c7dff;
+  --color-scatter-sphere-high: #ff5470;
+  --color-scatter-torus-low: #ffd54a;
+  --color-scatter-torus-high: #ff6ea8;
+
   --color-level-info: #7aa2f7;
   --color-level-warn: #e0af68;
   --color-level-error: #f7768e;

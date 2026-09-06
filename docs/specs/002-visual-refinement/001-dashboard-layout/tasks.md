@@ -63,8 +63,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 仕様参照: spec.md §5.3 `Home`, §6.2 slot とパネルの対応, Requirement 3
     - 検証コマンド: `(cd frontend && npm run lint)` / `grep -nE "TITLE|panelBody|<Panel[ />]|components/Panel'|'use client'" frontend/src/app/page.tsx` が 0 件(`Panel` は `DashboardGrid` が生成するため `page.tsx` から消える。`TimeseriesPanel` 等のパネル名は残るため `Panel\b` で判定しない) / `wails build` が終了コード 0(`next build` の型検査が 3.3 の型を通す)/ `go vet ./... && go test ./...` が終了コード 0 / `git diff --name-only main...HEAD` に §6.2 の 6 パネルコンポーネントと Go の生成源 5 本(`logsource.go`・`commitsource.go`・`graphsource.go`・`scattersource.go`・`metricsource.go`)が含まれない / 3.3 の異常系: 前提として変異前に `(cd frontend && npx tsc --noEmit)` が終了コード 0・エラー 0 件であることを確認したうえで、`page.tsx` の `panels` から 1 つの slot(例: `commit`)を一時的に除き、同コマンドが終了コード 2 で失敗し、そのエラーが `src/app/page.tsx` の `panels` 引数に対する TS2741(`Property 'commit' is missing in type ...`)であること(欠けた slot 名をメッセージに含む)を確認し、元に戻す(コミットしない)。余分な鍵を足す側は `Record<DashboardSlot, ...>` に対する余剰プロパティ検査(TS2353)で同様に失敗することを 1 例だけ確認する
 
-- [ ] 2. (P) README「画面」節を改訂する
-  - [ ] 2.1 README「画面」節の冒頭を配置の型(中央主役型)を述べる 1 文に置き換え、表を「パネル」「位置」「内容」の 3 列・§6.1 の「順」の 6 行にし、表の下の 1 文を配置の順(上から下、同じ高さでは左から右)の趣旨に置き換える。ASCII 図は載せない。「内容」列の文は現行を保つ
+- [x] 2. (P) README「画面」節を改訂する
+  - [x] 2.1 README「画面」節の冒頭を配置の型(中央主役型)を述べる 1 文に置き換え、表を「パネル」「位置」「内容」の 3 列・§6.1 の「順」の 6 行にし、表の下の 1 文を配置の順(上から下、同じ高さでは左から右)の趣旨に置き換える。ASCII 図は載せない。「内容」列の文は現行を保つ
     _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
     _Boundary: README_
     _Interfaces: Consumes spec.md §6.1 の「位置」列の語と §6.2 の「パネル」列の語(文書上の対応。コードのシグネチャ共有は無い)_

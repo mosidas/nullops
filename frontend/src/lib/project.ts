@@ -1,4 +1,4 @@
-import type { Vec3 } from './axes.ts';
+import type { Vec3 } from './panes.ts';
 
 /** 投影の結果。`depth` は大きいほど手前。 */
 export type Projected = { sx: number; sy: number; scale: number; depth: number };

@@ -65,7 +65,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 ## タスク一覧
 
 - [ ] 1. パネルの幾何と縦面の重み(純粋なモジュール)
-  - [ ] 1.1 `panes.ts` と `panes.test.ts` を作り、`Vec3` の import 元を `panes.ts` に移す
+  - [x] 1.1 `panes.ts` と `panes.test.ts` を作り、`Vec3` の import 元を `panes.ts` に移す
     _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 6.2_
     _Boundary: frontend/src/lib(幾何)_
     _Interfaces: Produces `Vec3`・`WallId`・`Pane`・`PANES`・`WALL_IDS`・`GRID_DIVISIONS`・`GRID_STOPS`・`wallWeights(yaw: number, out: Float64Array): Float64Array`(spec.md §5.2)_
@@ -132,4 +132,4 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 
 ## Implementation Notes
 
-(dev-implement が追記する)
+- 1.1 完了(2026-09-07): `panes.ts`・`panes.test.ts` を作成。`Vec3` の定義元を `panes.ts` へ移し、`project.ts` は `panes.ts` から import、`axes.ts` は 5.1 で削除するまで `Vec3` を再 export するだけに変えた(既存の import を壊さないため)。検証: `npm test` 46 件 pass(`panes.test.ts` 10 件を含む)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `grep -c "Math\.\(sin\|cos\)(" panes.ts` = 2。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)

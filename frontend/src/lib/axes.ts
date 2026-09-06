@@ -1,5 +1,7 @@
-/** モデル座標の 1 点。各成分は -1〜1 の単位立方体に収まる(spec.md §6.2)。 */
-export type Vec3 = { x: number; y: number; z: number };
+// Vec3 の定義元は panes.ts へ移した(unit #4 spec §5.2)。本ファイルは 5.1 で削除するまで既存の import を保つための再 export だけ残す。
+export type { Vec3 } from './panes.ts';
+
+import type { Vec3 } from './panes.ts';
 
 /** 軸線 1 本。`axis` は X・Y・Z の 3 軸、`edge` は単位立方体の稜線。 */
 export type Segment = { from: Vec3; to: Vec3; kind: 'axis' | 'edge' };

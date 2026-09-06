@@ -2,7 +2,7 @@ import type { DashboardSlot } from './DashboardGrid';
 
 export type PanelProps = {
   slot: DashboardSlot; // 占める領域。DashboardGrid の grid-template-areas の領域名と一致する
-  children: React.ReactNode; // 本文
+  children: React.ReactNode;
 };
 
 // slot から grid-area のクラス名を引く。列・行の数値は持たず、領域名だけで格子と結び付ける。

@@ -115,8 +115,11 @@ func TestScatterSourceKeepsPointsInUnitCube(t *testing.T) {
 					t.Fatalf("フレーム %d の点 %d の %s が範囲外である: %v", frame, i, axis, v)
 				}
 			}
-			if p.W < 0.0 || p.W > 1.0 {
-				t.Fatalf("フレーム %d の点 %d の W が範囲外である: %v", frame, i, p.W)
+			if p.S > 2 {
+				t.Fatalf("フレーム %d の点 %d の S が 0・1・2 のいずれでもない: %d", frame, i, p.S)
+			}
+			if p.C < 0.0 || p.C > 1.0 {
+				t.Fatalf("フレーム %d の点 %d の C が範囲外である: %v", frame, i, p.C)
 			}
 		}
 	}

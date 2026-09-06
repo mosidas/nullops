@@ -74,7 +74,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 ## タスク一覧
 
 - [ ] 1. Go 側: `ScatterPoint` の契約変更と構造の生成
-  - [ ] 1.1 `ScatterPoint` の `W` を廃し `S uint8`(`json:"s"`)・`C float64`(`json:"c"`)を足す。`newScatterPoint(x, y, z float64, s uint8, c float64) (ScatterPoint, error)` にし、`C` の小数第 3 位への丸めと範囲検査、`S ≥ 3` の `errScatterPointUnknownStructure` を足す。既存の `errScatterPointOutOfRange`・`errScatterPointNotFinite` は保つ。テストを先に書く: 範囲内の受理と丸め(X・Y・Z は第 4 位、C は第 3 位)/ C の範囲外で `errScatterPointOutOfRange` / NaN・Inf で `errScatterPointNotFinite` / S = 3 で `errScatterPointUnknownStructure` / JSON のキーが `x`・`y`・`z`・`s`・`c` の 5 個だけ。`scattersource.go` の呼び出しはコンパイルが通る最小の変更(`S = 0`・`C = 0`)にとどめ、幾何は 1.2 で入れる
+  - [x] 1.1 `ScatterPoint` の `W` を廃し `S uint8`(`json:"s"`)・`C float64`(`json:"c"`)を足す。`newScatterPoint(x, y, z float64, s uint8, c float64) (ScatterPoint, error)` にし、`C` の小数第 3 位への丸めと範囲検査、`S ≥ 3` の `errScatterPointUnknownStructure` を足す。既存の `errScatterPointOutOfRange`・`errScatterPointNotFinite` は保つ。テストを先に書く: 範囲内の受理と丸め(X・Y・Z は第 4 位、C は第 3 位)/ C の範囲外で `errScatterPointOutOfRange` / NaN・Inf で `errScatterPointNotFinite` / S = 3 で `errScatterPointUnknownStructure` / JSON のキーが `x`・`y`・`z`・`s`・`c` の 5 個だけ。`scattersource.go` の呼び出しはコンパイルが通る最小の変更(`S = 0`・`C = 0`)にとどめ、幾何は 1.2 で入れる
     _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
     _Boundary: ScatterPoint_
     _Interfaces: Changes `newScatterPoint(x, y, z, s, c)` / Produces `errScatterPointUnknownStructure` / Changes JSON の形(`w` → `s`・`c`。`wails build` で `frontend/wailsjs` の `main.ScatterPoint` が再生成される)_
@@ -136,3 +136,5 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 ### 進捗台帳
 
 (サブタスクの完了ごとに追記する)
+
+- 1.1 完了(2026-09-06): `scatterpoint.go` を `S`・`C` の契約へ置き換え(`newScatterPoint(x, y, z, s, c)`、丸めを生成関数に寄せ、`errScatterPointUnknownStructure` を追加)。検証: `wails build` 0 / `go vet ./...` 0 / `go test ./...` 0 / `go test -run TestNewScatterPoint` 5 件 PASS / `grep 'json:"w"' *.go` 0 件 / `grep -c 'json:"[xyzsc]"' scatterpoint.go` = 5 / `grep '\.W\b' *.go` 0 件 / `errors.Is` 3 分岐(2.3〜2.5)。`wails build` で `frontend/wailsjs` の `main.ScatterPoint` が `s`・`c` を持つことを確認。補足: 契約変更で `Scatter3DPanel.tsx` の `point.w` が型検査に落ちるため、3.1 までの繋ぎとして `point.c` を重みに読む 1 行だけを変えた(描画の置き換えは 3.1)。丸めの前に範囲検査を置き、1.00004 のような値が丸めで 1.0 に化けて通るのを防ぐテストを足した。

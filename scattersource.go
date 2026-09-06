@@ -141,7 +141,7 @@ func (s *scatterSource) Next() any {
 
 	out := make([]ScatterPoint, len(s.points))
 	for i, p := range s.points {
-		sp, err := newScatterPoint(p.x, p.y, p.z, p.w)
+		sp, err := newScatterPoint(p.x, p.y, p.z, 0, 0)
 		if err != nil {
 			panic("scatterSource が ScatterPoint の不変条件を破っている: " + err.Error())
 		}

@@ -168,7 +168,8 @@ function render(
       // 0（奥）〜1（手前）。透視投影の scale と同じ向きに動くが、
       // 焦点距離に依存しない値にするため回転後の Z から求める。
       const nearness = (projected.depth + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
-      const weight = WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * point.w;
+      // 1.1 で W が廃止されたため、3.1 で帯へ置き換えるまでの繋ぎとして C を重みに使う。
+      const weight = WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * point.c;
 
       // 奥の点ほど小さく淡くする（spec.md §7 6.5）。
       const radius = Math.max(baseRadius * projected.scale * weight, MIN_POINT_RADIUS);

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import type { main } from '../../wailsjs/go/models';
+import { AXIS_SEGMENTS } from '../lib/axes';
 import { loadSnapshot, subscribeScatter } from '../lib/feed';
 import { recordFrame } from '../lib/framestats';
-import { type Projected, projectPoint, SCATTER_PITCH } from '../lib/project';
+import { advanceOrbit, beginDrag, createOrbit, dragBy, endDrag, type Orbit } from '../lib/orbit';
+import { type Projected, projectPoint } from '../lib/project';
 
 /** 計測器へ渡すパネル名（spec.md §9.1）。 */
 const PANEL_NAME = 'scatter';
@@ -21,17 +23,6 @@ type Cloud = Pick<main.ScatterCloud, 'seq' | 'points'>;
 
 /** 点群が未着のあいだの描画対象。毎回作り直さないため、モジュールの定数として持つ。 */
 const EMPTY_CLOUD: Cloud = { seq: 0, points: [] };
-
-/** ヨーの角速度（ラジアン毎秒）。1 周におよそ 26 秒かかる速さ。 */
-const YAW_RATE_RAD_PER_SEC = 0.24;
-
-/**
- * 1 フレームとして扱う経過時間の上限（ミリ秒）。
- *
- * ウィンドウの最小化などで requestAnimationFrame が止まると、復帰時の
- * 差分が数秒に達しうる。頭打ちにしないと点群がその分だけ一気に回る。
- */
-const MAX_FRAME_MS = 100;
 
 /**
  * 回転後の Z がとりうる絶対値の上限。
@@ -56,6 +47,22 @@ const ALPHA_NEAR = 1.0;
 const WEIGHT_FLOOR = 0.45;
 
 /**
+ * ハローの半径と不透明度の、本体に対する比（spec.md §6.3）。
+ *
+ * 放射グラデーションではなく同じ色の円を 2 回塗って近似する。グラデーションは
+ * 点ごとにオブジェクトを作る API しかなく、毎フレーム 256 個の割り当てになるため。
+ */
+const HALO_RADIUS_RATIO = 2.2;
+const HALO_ALPHA_RATIO = 0.22;
+
+/** 軸線の不透明度。奥（n = 0）で 0.25、手前（n = 1）で 0.9（spec.md §6.2）。 */
+const LINE_ALPHA_FAR = 0.25;
+const LINE_ALPHA_SPAN = 0.65;
+
+/** 軸線の線幅（CSS ピクセル）。 */
+const LINE_WIDTH = 1;
+
+/**
  * トークンの解決に失敗したときの退避先（spec.md §7 9.2）。
  *
  * 16 進の直値を置かないのは、色の正本を globals.css の @theme に一本化する
@@ -64,9 +71,11 @@ const WEIGHT_FLOOR = 0.45;
  */
 const FALLBACK_POINT_COLOR = 'white';
 const FALLBACK_BACKGROUND_COLOR = 'transparent';
+// 軸線の退避先を gray にするのは、点の white と区別がつくようにするため。
+const FALLBACK_LINE_COLOR = 'gray';
 
 /** 描画に使う色。マウント時に 1 度だけ解決する。 */
-type PanelColors = { point: string; background: string };
+type PanelColors = { point: string; background: string; axis: string; edge: string };
 
 /**
  * @theme のトークンを実行時に解決する。
@@ -101,7 +110,7 @@ function render(
   canvas: HTMLCanvasElement,
   view: { width: number; height: number },
   cloud: Cloud,
-  yaw: number,
+  orbit: Orbit,
   colors: PanelColors,
   buffer: Plotted[],
 ): void {
@@ -112,48 +121,72 @@ function render(
   ctx.fillStyle = colors.background;
   ctx.fillRect(0, 0, view.width, view.height);
 
-  const points = cloud.points;
-  if (points.length === 0) {
-    return;
+  const yaw = orbit.yaw;
+  const pitch = orbit.pitch;
+
+  // 軸線を点より先に描く。点ごとの深度比較を線と行うのは割に合わないため、
+  // 線を下に敷いて奥行きは不透明度で表す（spec.md §8）。点群が空でも描く（4.7）。
+  ctx.lineWidth = LINE_WIDTH;
+  for (let i = 0; i < AXIS_SEGMENTS.length; i += 1) {
+    const segment = AXIS_SEGMENTS[i];
+    const from = projectPoint(segment.from, yaw, pitch, view);
+    const to = projectPoint(segment.to, yaw, pitch, view);
+    const nearness = ((from.depth + to.depth) / 2 + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
+    ctx.globalAlpha = LINE_ALPHA_FAR + LINE_ALPHA_SPAN * nearness;
+    ctx.strokeStyle = segment.kind === 'axis' ? colors.axis : colors.edge;
+    ctx.beginPath();
+    ctx.moveTo(from.sx, from.sy);
+    ctx.lineTo(to.sx, to.sy);
+    ctx.stroke();
   }
 
-  // 点数は固定（spec.md §3 前提 3）だが、空の点群から最初の点群へ移る瞬間だけ
-  // 長さが変わる。既存の器はそのまま使い、足りないぶんだけ作る。
-  if (buffer.length !== points.length) {
-    buffer.length = points.length;
-  }
-  for (let i = 0; i < points.length; i += 1) {
-    const point = points[i];
-    const projected = projectPoint(point, yaw, SCATTER_PITCH, view);
-    const entry = buffer[i];
-    if (entry === undefined) {
-      buffer[i] = { point, projected };
-    } else {
-      entry.point = point;
-      entry.projected = projected;
+  const points = cloud.points;
+  if (points.length > 0) {
+    // 点数は固定（spec.md §3 前提 3）だが、空の点群から最初の点群へ移る瞬間だけ
+    // 長さが変わる。既存の器はそのまま使い、足りないぶんだけ作る。
+    if (buffer.length !== points.length) {
+      buffer.length = points.length;
+    }
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      const projected = projectPoint(point, yaw, pitch, view);
+      const entry = buffer[i];
+      if (entry === undefined) {
+        buffer[i] = { point, projected };
+      } else {
+        entry.point = point;
+        entry.projected = projected;
+      }
+    }
+
+    // 奥から手前へ描くことで、手前の点が奥の点に重なる（spec.md §7 6.4）。
+    buffer.sort(byDepthAscending);
+
+    const baseRadius = Math.min(view.width, view.height) * POINT_RADIUS_RATIO;
+    ctx.fillStyle = colors.point;
+    for (const { point, projected } of buffer) {
+      // 0（奥）〜1（手前）。透視投影の scale と同じ向きに動くが、
+      // 焦点距離に依存しない値にするため回転後の Z から求める。
+      const nearness = (projected.depth + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
+      const weight = WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * point.w;
+
+      // 奥の点ほど小さく淡くする（spec.md §7 6.5）。
+      const radius = Math.max(baseRadius * projected.scale * weight, MIN_POINT_RADIUS);
+      const alpha = (ALPHA_FAR + (ALPHA_NEAR - ALPHA_FAR) * nearness) * weight;
+
+      // ハロー → 本体の順。本体がハローの上に載る（spec.md §6.3）。
+      ctx.globalAlpha = alpha * HALO_ALPHA_RATIO;
+      ctx.beginPath();
+      ctx.arc(projected.sx, projected.sy, radius * HALO_RADIUS_RATIO, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(projected.sx, projected.sy, radius, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-
-  // 奥から手前へ描くことで、手前の点が奥の点に重なる（spec.md §7 6.4）。
-  buffer.sort(byDepthAscending);
-
-  const baseRadius = Math.min(view.width, view.height) * POINT_RADIUS_RATIO;
-  ctx.fillStyle = colors.point;
-  for (const { point, projected } of buffer) {
-    // 0（奥）〜1（手前）。透視投影の scale と同じ向きに動くが、
-    // 焦点距離に依存しない値にするため回転後の Z から求める。
-    const nearness = (projected.depth + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
-    const weight = WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * point.w;
-
-    // 奥の点ほど小さく淡くする（spec.md §7 6.5）。
-    const radius = Math.max(baseRadius * projected.scale * weight, MIN_POINT_RADIUS);
-    ctx.globalAlpha = (ALPHA_FAR + (ALPHA_NEAR - ALPHA_FAR) * nearness) * weight;
-
-    ctx.beginPath();
-    ctx.arc(projected.sx, projected.sy, radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // 次のフレームの clearRect / fillRect が半透明にならないよう戻す。
+  // 次のフレームの clearRect / fillRect が半透明にならないよう戻す（spec.md §7 5.5）。
   ctx.globalAlpha = 1;
 }
 
@@ -237,8 +270,8 @@ export function Scatter3DPanel(): React.JSX.Element {
 
   // 回転と描画のループ。
   //
-  // ヨーを state ではなく ref に持つのは、毎フレームの再描画を React に
-  // 起こさせないため（CLAUDE.md TypeScript 規約。spec.md §8）。
+  // 視点を state ではなく effect 内のオブジェクトに持つのは、毎フレームの再描画を
+  // React に起こさせないため（CLAUDE.md TypeScript 規約。spec.md §8）。
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) {
@@ -256,11 +289,14 @@ export function Scatter3DPanel(): React.JSX.Element {
     const colors: PanelColors = {
       point: readToken('--color-accent-scatter', FALLBACK_POINT_COLOR),
       background: readToken('--color-surface-1', FALLBACK_BACKGROUND_COLOR),
+      axis: readToken('--color-text-dim', FALLBACK_LINE_COLOR),
+      edge: readToken('--color-border', FALLBACK_LINE_COLOR),
     };
     // 投影結果の器。ループの外に置いてフレームごとの確保を避ける。
     const buffer: Plotted[] = [];
 
-    let yaw = 0;
+    // 視点はこの effect の寿命で 1 つだけ作り、状態機械がその場で更新する（spec.md §6.1）。
+    const orbit = createOrbit();
     let prevMs: number | null = null;
     let handle = 0;
 
@@ -270,12 +306,10 @@ export function Scatter3DPanel(): React.JSX.Element {
       // 別に読むと、コールバック開始からの誤差が計測へ混じるため（spec.md §9.1）。
       recordFrame(PANEL_NAME, nowMs);
 
-      // 経過時間の上限を切るのは、最小化からの復帰などでフレームが長く空いたときに
-      // ヨーが一気に進んで点群が飛ぶのを防ぐため（spec.md §7 7.3）。
-      const elapsed = prevMs === null ? 0 : Math.min(nowMs - prevMs, MAX_FRAME_MS);
+      // 経過時間の切り詰めと自動回転・復帰は状態機械の側にある（spec.md §5.2）。
+      // 点群の更新イベントが 1 度も届かなくても回転を続ける（spec.md §7 3.8）。
+      advanceOrbit(orbit, prevMs === null ? 0 : nowMs - prevMs);
       prevMs = nowMs;
-      // 点群の更新イベントが 1 度も届かなくても回転を続ける（spec.md §7 7.1）。
-      yaw += (elapsed / 1000) * YAW_RATE_RAD_PER_SEC;
 
       const view = viewRef.current;
       if (view.width === 0 || view.height === 0) {
@@ -283,18 +317,75 @@ export function Scatter3DPanel(): React.JSX.Element {
         return;
       }
 
-      render(ctx, canvas, view, cloudRef.current, yaw, colors, buffer);
+      render(ctx, canvas, view, cloudRef.current, orbit, colors, buffer);
     };
+
+    // ポインタ操作。前回位置は数値 2 つで持ち、イベントごとにオブジェクトを作らない。
+    // Pointer Events を使うのは、setPointerCapture で枠の外への追従が 1 つの API で済むため（spec.md §8）。
+    let lastX = 0;
+    let lastY = 0;
+    const onPointerDown = (event: PointerEvent): void => {
+      // 主ボタン以外や副ポインタ（マルチタッチの 2 本目）は視点を変えない（spec.md §7 1.4）。
+      if (event.button !== 0 || !event.isPrimary) {
+        return;
+      }
+      beginDrag(orbit);
+      lastX = event.clientX;
+      lastY = event.clientY;
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch (reason: unknown) {
+        // キャプチャできないポインタで drag に居座ると、pointerup を取り逃して
+        // 自動回転が止まったままになる。例外を伝播させず auto へ戻す（spec.md §7 6.5）。
+        console.error('ポインタのキャプチャに失敗した。ドラッグを中止して自動回転へ戻す:', reason);
+        endDrag(orbit);
+        return;
+      }
+      // カーソルは React の再描画ではなく style で切り替える。毎フレーム触らない（spec.md §7 7.2）。
+      canvas.style.cursor = 'grabbing';
+    };
+    const onPointerMove = (event: PointerEvent): void => {
+      // auto の間の移動は無視する（spec.md §7 1.5）。dragBy 自体も auto では何もしないが、
+      // 前回位置の更新を drag 中に限ることで、ドラッグ開始時の差分が飛ばないようにする。
+      if (orbit.mode !== 'drag') {
+        return;
+      }
+      dragBy(orbit, event.clientX - lastX, event.clientY - lastY);
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
+    // pointerup・pointercancel・lostpointercapture・blur は同じ 1 つの関数で受ける。
+    // endDrag は冪等なので、続けて届いても復帰をやり直さない（spec.md §7 6.2〜6.4）。
+    const stopDrag = (): void => {
+      endDrag(orbit);
+      canvas.style.cursor = '';
+    };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', stopDrag);
+    canvas.addEventListener('pointercancel', stopDrag);
+    canvas.addEventListener('lostpointercapture', stopDrag);
+    // アプリの切り替えで pointerup が届かない場合に備える（spec.md §3 前提 6）。
+    window.addEventListener('blur', stopDrag);
 
     handle = window.requestAnimationFrame(frame);
     // アンマウントでループを止める（spec.md §7 7.4）。止めないと外れた
     // キャンバスへ描き続け、パネルの数だけ無駄なフレームが積み上がる。
+    // リスナーも全部解除する（spec.md §7 6.6）。
     return () => {
       window.cancelAnimationFrame(handle);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', stopDrag);
+      canvas.removeEventListener('pointercancel', stopDrag);
+      canvas.removeEventListener('lostpointercapture', stopDrag);
+      window.removeEventListener('blur', stopDrag);
     };
   }, []);
 
   // 枠いっぱいに広げる。block にするのは、inline 要素の行下の余白で
   // 枠がわずかに縦へ溢れ、ページ側にスクロールバーが出るのを防ぐため。
-  return <canvas ref={canvasRef} className="block h-full w-full" />;
+  // touch-none はドラッグがページのスクロールやテキスト選択を起こさないため、
+  // cursor-grab は auto の間のカーソル（drag 中は style.cursor が上書きする。spec.md §7 7.1〜7.3）。
+  return <canvas ref={canvasRef} className="block h-full w-full touch-none cursor-grab" />;
 }

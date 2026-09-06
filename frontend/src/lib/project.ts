@@ -1,4 +1,4 @@
-import type { main } from '../../wailsjs/go/models';
+import type { Vec3 } from './axes.ts';
 
 /** 投影の結果。`depth` は大きいほど手前。 */
 export type Projected = { sx: number; sy: number; scale: number; depth: number };
@@ -25,15 +25,12 @@ const FILL = 0.78;
  * モデル座標の 1 点を、回転と透視投影を経てキャンバス座標へ落とす。
  *
  * 純関数であり、同じ引数につねに同じ値を返す(spec.md §5.6)。
+ * 第 1 引数を `Vec3` にしているのは、点群の `ScatterPoint` と軸線の端点を同じ関数で投影するため
+ * (`w` は読まないので `ScatterPoint` を渡す既存の呼び出しは互換)。
  * 描画コンポーネントから切り出しているのは、擬似データの生成と描画を分ける
  * という CLAUDE.md の規約に倣い、座標変換だけを単独で確かめられるようにするため。
  */
-export function projectPoint(
-  p: main.ScatterPoint,
-  yaw: number,
-  pitch: number,
-  view: { width: number; height: number },
-): Projected {
+export function projectPoint(p: Vec3, yaw: number, pitch: number, view: { width: number; height: number }): Projected {
   // ヨー(Y 軸まわり)。X と Z が回り、Y は変わらない。
   const cosYaw = Math.cos(yaw);
   const sinYaw = Math.sin(yaw);

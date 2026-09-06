@@ -79,14 +79,8 @@ const TERRAIN_STOP_TOKENS: readonly string[] = [
   '--color-scatter-terrain-mid',
   '--color-scatter-terrain-high',
 ];
-const SPHERE_STOP_TOKENS: readonly string[] = [
-  '--color-scatter-sphere-low',
-  '--color-scatter-sphere-high',
-];
-const TORUS_STOP_TOKENS: readonly string[] = [
-  '--color-scatter-torus-low',
-  '--color-scatter-torus-high',
-];
+const SPHERE_STOP_TOKENS: readonly string[] = ['--color-scatter-sphere-low', '--color-scatter-sphere-high'];
+const TORUS_STOP_TOKENS: readonly string[] = ['--color-scatter-torus-low', '--color-scatter-torus-high'];
 
 /** 描画に使う色。マウント時に 1 度だけ解決する。 */
 type PanelColors = { background: string; axis: string; edge: string };

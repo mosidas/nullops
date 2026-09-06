@@ -1,0 +1,11 @@
+{
+  "workflow": "sdd",
+  "unit": "dashboard-layout",
+  "state": "completed",
+  "approvals": {
+    "spec": true,
+    "tasks": true
+  },
+  "created": "2026-09-06",
+  "updated": "2026-09-06"
+}

@@ -12,6 +12,19 @@ spec.md が全タスクに掛ける制約(逐語)。
 - 「5.5. システムは、ログストリームの 1 行の列構成(時刻・ツール・レベル・本文)と各列の幅、折り返しの規則を変えてはならない。(常時)」
 - 「Windows・Linux での確認 — 理由: request.md §4」(§2 対象外。検証はすべて macOS で行う)
 - 「凍結済み文書は編集しない。」(§8)
+- 検証の前提: `cd frontend && npm ci` と `wails build` を 1 度通してから検証コマンドを回す(`node_modules`・`frontend/wailsjs`・`frontend/dist` が無い作業ツリーでは `npm run lint`・`npx tsc --noEmit`・`go test` が前提不足で失敗するため)
+
+CLAUDE.md が全タスクに掛ける制約(逐語)。
+
+- 「会話・ドキュメント・コード内コメント・PR/Issue 本文・コミットメッセージは日本語で記述しなければならない(MUST)。」
+- 「画面に描画する擬似ログとラベルは英語にする。模倣対象のツール(コンパイラ・パッケージマネージャ・CI 等)が英語で出力するため。」
+- 「`any` を使わない。型が定まらない箇所は `unknown` で受けて絞り込む」
+- 「描画コンポーネントと擬似データの生成を別ファイルに分ける」
+- 「再描画のたびに新しい関数・オブジェクトを作らない(アニメーションの発火頻度が高いため)」
+- 「Wails が生成するバインディング(`frontend/wailsjs/`)は手で編集しない」
+- 「why / why not を書く。コードを読めば分かることは書かない」
+- 「実在のシステム情報を読み取らず、外部へも通信しない。画面に出る値はすべてこのアプリが生成した擬似データとする」
+- 「`frontend/dist` と `frontend/wailsjs` は `wails build` の生成物であり、リポジトリに含めない」
 
 ## File Structure Plan
 
@@ -40,15 +53,15 @@ spec.md が全タスクに掛ける制約(逐語)。
     _Interfaces: Produces `export type DashboardSlot = 'timeseries' | 'gauge' | 'log' | 'scatter' | 'depgraph' | 'commit'`, `export type DashboardGridProps = { panels: Readonly<Record<DashboardSlot, React.ReactElement>> }`, `export function DashboardGrid(props: DashboardGridProps): React.JSX.Element`, `export type PanelProps = { slot: DashboardSlot; children: React.ReactNode }`, `export function Panel(props: PanelProps): React.JSX.Element`_
     - 対象ファイル: `frontend/src/components/DashboardGrid.tsx`(変更), `frontend/src/components/Panel.tsx`(変更)
     - 仕様参照: spec.md §5.1 `DashboardGrid`, §5.2 `Panel`, §6.1 格子と 6 枠の配置, §8 実現方針
-    - 検証コマンド: `(cd frontend && npm run lint)` / `grep -nE "h2|Children|console\.error|title" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -nE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -n "use client" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -c "grid-area\|area-\[" frontend/src/components/Panel.tsx` で 6 slot 分の領域名が対応表に揃っていることを確認 / この時点では `page.tsx` が旧契約のため `wails build` の型検査は通らない(1.2 で緑にする)
+    - 検証コマンド: `(cd frontend && npm run lint)` / `grep -nE "h2|Children|console\.error|title" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -nE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -n "use client" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -oE "\b(timeseries|gauge|log|scatter|depgraph|commit)\b" frontend/src/components/Panel.tsx | sort -u | wc -l` が 6(対応表に 6 slot の鍵が重複なく揃っている)かつ `grep -oE "\[grid-area:(timeseries|gauge|log|scatter|depgraph|commit)\]" frontend/src/components/Panel.tsx | sort -u | wc -l` が 6(各鍵の値が同名の領域を指す) / この時点では `page.tsx` が旧契約のため `wails build` の型検査は通らない(1.2 で緑にする)
   - [ ] 1.2 `Home` を新しい契約に合わせる。`DashboardGrid` に `panels` として §6.2 の対応で 6 つの slot すべてにパネル要素を渡し、`PANEL_TITLES` 等の見出し文字列の定数・`panelBody` の分岐・`Panel` の直接使用・配置の数値を持たない形にする。`'use client'` は付けない
-    _Requirements: 3.1, 3.5, 4.2, 7.2, 7.3, 7.4, 7.5_
+    _Requirements: 3.1, 3.3, 3.5, 4.2, 7.2, 7.3, 7.4, 7.5_
     _Boundary: Home_
     _Depends: 1.1_
     _Interfaces: Consumes `DashboardGrid(props: { panels: Readonly<Record<DashboardSlot, React.ReactElement>> })`, `DashboardSlot` / Produces `build/bin` の配布ビルド(`wails build` の生成物。3.1 が目視・計測に使う)_
     - 対象ファイル: `frontend/src/app/page.tsx`(変更)
     - 仕様参照: spec.md §5.3 `Home`, §6.2 slot とパネルの対応, Requirement 3
-    - 検証コマンド: `(cd frontend && npm run lint)` / `grep -nE "TITLE|panelBody|<Panel[ />]|components/Panel'|'use client'" frontend/src/app/page.tsx` が 0 件(`Panel` は `DashboardGrid` が生成するため `page.tsx` から消える。`TimeseriesPanel` 等のパネル名は残るため `Panel\b` で判定しない) / `wails build` が終了コード 0(`next build` の型検査が 3.3 の型を通す)/ `go vet ./... && go test ./...` が終了コード 0 / `git diff --name-only main...HEAD` に §6.2 の 6 パネルコンポーネントと Go の生成源 5 本(`logsource.go`・`commitsource.go`・`graphsource.go`・`scattersource.go`・`metricsource.go`)が含まれない / 3.3 の異常系: `panels` から 1 つの slot を一時的に除いた状態で `(cd frontend && npx tsc --noEmit)` が型エラーを返すことを確認し、元に戻す(コミットしない)
+    - 検証コマンド: `(cd frontend && npm run lint)` / `grep -nE "TITLE|panelBody|<Panel[ />]|components/Panel'|'use client'" frontend/src/app/page.tsx` が 0 件(`Panel` は `DashboardGrid` が生成するため `page.tsx` から消える。`TimeseriesPanel` 等のパネル名は残るため `Panel\b` で判定しない) / `wails build` が終了コード 0(`next build` の型検査が 3.3 の型を通す)/ `go vet ./... && go test ./...` が終了コード 0 / `git diff --name-only main...HEAD` に §6.2 の 6 パネルコンポーネントと Go の生成源 5 本(`logsource.go`・`commitsource.go`・`graphsource.go`・`scattersource.go`・`metricsource.go`)が含まれない / 3.3 の異常系: 前提として変異前に `(cd frontend && npx tsc --noEmit)` が終了コード 0・エラー 0 件であることを確認したうえで、`page.tsx` の `panels` から 1 つの slot(例: `commit`)を一時的に除き、同コマンドが終了コード 2 で失敗し、そのエラーが `src/app/page.tsx` の `panels` 引数に対する TS2741(`Property 'commit' is missing in type ...`)であること(欠けた slot 名をメッセージに含む)を確認し、元に戻す(コミットしない)。余分な鍵を足す側は `Record<DashboardSlot, ...>` に対する余剰プロパティ検査(TS2353)で同様に失敗することを 1 例だけ確認する
 
 - [ ] 2. (P) README「画面」節を改訂する
   - [ ] 2.1 README「画面」節の冒頭を配置の型(中央主役型)を述べる 1 文に置き換え、表を「パネル」「位置」「内容」の 3 列・§6.1 の「順」の 6 行にし、表の下の 1 文を配置の順(上から下、同じ高さでは左から右)の趣旨に置き換える。ASCII 図は載せない。「内容」列の文は現行を保つ
@@ -60,14 +73,14 @@ spec.md が全タスクに掛ける制約(逐語)。
     - 検証コマンド: `grep -nE "3 列 2 行|枠の題名|Log Stream|Commit Graph|Dependency Graph|Scatter 3D|Utilization|Timeseries" README.md` が 0 件 / `awk '/^## 画面/{f=1} f&&/^## /&&!/^## 画面/{exit} f' README.md` の出力で、表の 6 行の並びが「折れ線グラフ・タコメータ・ログストリーム・3D 散布図・グラフビュー・コミットグラフ」、「位置」列が「上の帯・右上・左の縦長・中央(最も大きい枠)・右の上段・右の下段」であることを照合 / `grep -nE "^\s*[+|]-+[+|]|┌|└|├" README.md` が 0 件(ASCII 図なし)
 
 - [ ] 3. 最終検証(静的検査・目視・計測)
-  - [ ]* 3.1 静的検査を全部通し、配布ビルドと `-devtools` ビルドで人間の目視・計測に委ねる項目を `## Implementation Notes` に整理する。目視・計測は spec.md §6.1 の概算表(±4 px)、Requirement 1.4・1.5・1.6・1.7・2.5・4.1・4.3・5.2〜5.4・7.1・7.6 を対象とし(1.6 は 1440×900 と下限 1100×720 でページに縦横のスクロールバーが出ないこと、2.5 はログストリームの枠にログが溜まった状態で `section` の外へはみ出さず本文領域だけがスクロールすること)、実行環境で確認できたものは結果を、できなかったものは未検証項目として確認手順を残す(前 unit `005-framestats-runtime` の Implementation Notes と同じ形式)
+  - [ ] 3.1 静的検査を全部通し、配布ビルドと `-devtools` ビルドで人間の目視・計測に委ねる項目を `## Implementation Notes` に整理する。目視・計測は spec.md §6.1 の概算表(±4 px)、Requirement 1.4・1.5・1.6・1.7・2.5・4.1・4.3・5.2〜5.4・7.1・7.6 を対象とし(1.6 は 1440×900 と下限 1100×720 でページに縦横のスクロールバーが出ないこと、2.5 はログストリームの枠にログが溜まった状態で `section` の外へはみ出さず本文領域だけがスクロールすること)、実行環境で確認できたものは結果を、できなかったものは未検証項目として確認手順を残す(前 unit `005-framestats-runtime` の Implementation Notes と同じ形式)
     _Requirements: 1.4, 1.5, 1.6, 1.7, 2.5, 4.1, 4.3, 5.2, 5.3, 5.4, 5.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
     _Boundary: Verification_
     _Depends: 1.2, 2.1_
     _Interfaces: Consumes 1.2 が生成する `build/bin` のアプリと `window.nullops.enableFrameStats()`(既存の計測器。本 unit で変えない)_
     - 対象ファイル: `docs/specs/002-visual-refinement/001-dashboard-layout/tasks.md`(変更。`## Implementation Notes` のみ)
     - 仕様参照: spec.md §6.1 概算表, §6.4, Requirement 1・4・5・7, `docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md` B 節
-    - 検証コマンド: `go vet ./... && go test ./... && (cd frontend && npm ci && npm run lint) && wails build` がすべて終了コード 0 / `git diff --name-only main...HEAD -- frontend/src/components/LogStreamPanel.tsx` が 0 件(5.5) / `wails build -devtools` のビルドで B 節の手順により p95 を計測し、5 パネルとも 20 ms 以下であることを記録(実行できない環境では未検証項目として手順を残す)
+    - 検証コマンド: `(cd frontend && npm ci) && wails build && go vet ./... && go test ./... && (cd frontend && npm run lint)` がこの順で実行され、すべて終了コード 0(`npm ci` → `wails build` を先に置くのは Global Constraints の検証の前提のとおり、`frontend/wailsjs`・`frontend/dist` を生成してから Go 側の検査と lint を回すため) / `git diff --name-only main...HEAD -- frontend/src/components/LogStreamPanel.tsx` が 0 件(5.5) / `wails build -devtools` のビルドで B 節の手順により p95 を計測し、5 パネルとも 20 ms 以下であることを記録(実行できない環境では未検証項目として手順を残す)
 
 ## Implementation Notes
 

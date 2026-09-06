@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BAND_ALPHA, buildRamp, DEPTH_BANDS, PALETTE_STEPS, parseHex, type Rgb, rotateHue } from './palette.ts';
+import {
+  BAND_ALPHA,
+  buildRamp,
+  buildShadowRamp,
+  DEPTH_BANDS,
+  PALETTE_STEPS,
+  parseHex,
+  type Rgb,
+  rotateHue,
+} from './palette.ts';
 
 // 色の直値の静的検査(`#` + 16 進)に掛からないよう、テストでは `#` を後から連結する。
 function hex(digits: string): string {
@@ -93,5 +102,44 @@ describe('buildRamp', () => {
   it('停止色が 1 色・4 色なら例外を投げる', () => {
     assert.throws(() => buildRamp([BLUE]));
     assert.throws(() => buildRamp([BLUE, TEAL, YELLOW, PINK]));
+  });
+});
+
+describe('buildShadowRamp', () => {
+  const cases: { name: string; stops: Rgb[] }[] = [
+    { name: '2 色', stops: [BLUE, PINK] },
+    { name: '3 色', stops: [BLUE, TEAL, YELLOW] },
+  ];
+
+  for (const { name, stops } of cases) {
+    // 受け入れ基準 4.6: 8 本、段 0 が stops[0]、段 7 が最後の停止色、a が 0.22。
+    it(`${name}: 8 段で端点が停止色に一致し a が 0.22`, () => {
+      const ramp = buildShadowRamp(stops, 8, 0.22);
+      assert.equal(ramp.length, 8);
+      assert.deepEqual(parseRgba(ramp[0]).rgb, stops[0]);
+      assert.deepEqual(parseRgba(ramp[7]).rgb, stops[stops.length - 1]);
+      for (const text of ramp) {
+        assert.equal(parseRgba(text).a, 0.22);
+      }
+    });
+  }
+
+  it('3 色の中央の停止色が中間の段に現れる', () => {
+    const ramp = buildShadowRamp([BLUE, TEAL, YELLOW], 8, 0.22);
+    assert.deepEqual(parseRgba(ramp[4]).rgb, TEAL);
+  });
+
+  it('PALETTE_STEPS 段・帯の不透明度で作ると buildRamp の行と一致する', () => {
+    const ramp = buildRamp([BLUE, TEAL, YELLOW]);
+    for (let band = 0; band < DEPTH_BANDS; band += 1) {
+      assert.deepEqual(buildShadowRamp([BLUE, TEAL, YELLOW], PALETTE_STEPS, BAND_ALPHA[band]), ramp[band]);
+    }
+  });
+
+  it('停止色が 1 色・4 色、段数が 1・非整数なら例外を投げる', () => {
+    assert.throws(() => buildShadowRamp([BLUE], 8, 0.22));
+    assert.throws(() => buildShadowRamp([BLUE, TEAL, YELLOW, PINK], 8, 0.22));
+    assert.throws(() => buildShadowRamp([BLUE, PINK], 1, 0.22));
+    assert.throws(() => buildShadowRamp([BLUE, PINK], 2.5, 0.22));
   });
 });

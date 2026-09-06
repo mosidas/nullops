@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import type { Vec3 } from './axes.ts';
-import { createProjectedCloud, type Projected, projectPoint, projectPoints, SCATTER_PITCH } from './project.ts';
+import type { Vec3 } from './panes.ts';
+import {
+  createProjectedCloud,
+  FILL,
+  type Projected,
+  projectPoint,
+  projectPoints,
+  projectPointsOnto,
+  SCATTER_PITCH,
+} from './project.ts';
 
 const VIEW = { width: 640, height: 400 };
 
@@ -122,5 +130,101 @@ describe('projectPoints', () => {
     const points = samplePoints(500);
     projectPoints(points, 0.4, SCATTER_PITCH, VIEW, createProjectedCloud(points.length));
     assert.equal(calls, 4);
+  });
+});
+
+describe('projectPointsOnto', () => {
+  const originalCos = Math.cos;
+  const originalSin = Math.sin;
+  afterEach(() => {
+    Math.cos = originalCos;
+    Math.sin = originalSin;
+  });
+
+  const AXES: ('x' | 'y' | 'z')[] = ['x', 'y', 'z'];
+  const VALUES: (-1 | 1)[] = [-1, 1];
+
+  // 受け入れ基準 4.1: ceil(points.length / stride) 個を書き、各点が「成分を置き換えた点の projectPoint」と一致する。
+  it('ceil(点数 / stride) 個を書き、各点が成分を置き換えた点の projectPoint と一致する', () => {
+    const points = samplePoints(201);
+    const one = emptyProjected();
+    for (const stride of [1, 2, 7]) {
+      const expectedLength = Math.ceil(points.length / stride);
+      const out = createProjectedCloud(expectedLength);
+      for (const axis of AXES) {
+        for (const value of VALUES) {
+          projectPointsOnto(points, axis, value, stride, 0.9, SCATTER_PITCH, VIEW, out);
+          assert.equal(out.length, expectedLength);
+          for (let j = 0; j < expectedLength; j += 1) {
+            const p = { ...points[j * stride], [axis]: value };
+            projectPoint(p, 0.9, SCATTER_PITCH, VIEW, one);
+            assert.ok(Math.abs(out.sx[j] - one.sx) <= 1e-3, `${axis}=${value} stride ${stride} 点 ${j} の sx`);
+            assert.ok(Math.abs(out.sy[j] - one.sy) <= 1e-3, `${axis}=${value} stride ${stride} 点 ${j} の sy`);
+            assert.ok(Math.abs(out.depth[j] - one.depth) <= 1e-3, `${axis}=${value} stride ${stride} 点 ${j} の depth`);
+          }
+        }
+      }
+    }
+  });
+
+  it('同じ引数で同じ値を書く', () => {
+    const points = samplePoints(50);
+    const a = createProjectedCloud(25);
+    const b = createProjectedCloud(25);
+    projectPointsOnto(points, 'y', -1, 2, 1.3, SCATTER_PITCH, VIEW, a);
+    projectPointsOnto(points, 'y', -1, 2, 1.3, SCATTER_PITCH, VIEW, b);
+    assert.deepEqual(Array.from(a.sx), Array.from(b.sx));
+    assert.deepEqual(Array.from(a.sy), Array.from(b.sy));
+    assert.deepEqual(Array.from(a.depth), Array.from(b.depth));
+  });
+
+  // 受け入れ基準 4.2: stride が 1 未満・非整数なら 1 として扱い、例外を投げない。
+  it('stride が 0・-1・1.5・NaN なら 1 として扱い例外を投げない', () => {
+    const points = samplePoints(10);
+    const expected = createProjectedCloud(10);
+    projectPointsOnto(points, 'z', 1, 1, 0.5, SCATTER_PITCH, VIEW, expected);
+    for (const stride of [0, -1, 1.5, Number.NaN]) {
+      const out = createProjectedCloud(10);
+      assert.doesNotThrow(() => projectPointsOnto(points, 'z', 1, stride, 0.5, SCATTER_PITCH, VIEW, out));
+      assert.equal(out.length, 10);
+      assert.deepEqual(Array.from(out.sx), Array.from(expected.sx));
+    }
+  });
+
+  // 受け入れ基準 4.3: 容量不足は容量まで書き、console.error に記録し、例外を投げない。
+  it('容量 2 に stride 1 で 3 点を渡すと length 2 で例外を投げない', () => {
+    const out = createProjectedCloud(2);
+    const originalError = console.error;
+    let logged = 0;
+    console.error = () => {
+      logged += 1;
+    };
+    try {
+      assert.doesNotThrow(() => projectPointsOnto(samplePoints(3), 'x', 1, 1, 0.2, SCATTER_PITCH, VIEW, out));
+    } finally {
+      console.error = originalError;
+    }
+    assert.equal(out.length, 2);
+    assert.equal(logged, 1);
+  });
+
+  // 受け入れ基準 4.4: Math.cos・Math.sin を合わせて 4 回だけ評価する。
+  it('三角関数を合わせて 4 回だけ評価する', () => {
+    let calls = 0;
+    Math.cos = (x: number): number => {
+      calls += 1;
+      return originalCos(x);
+    };
+    Math.sin = (x: number): number => {
+      calls += 1;
+      return originalSin(x);
+    };
+    const points = samplePoints(500);
+    projectPointsOnto(points, 'y', -1, 2, 0.4, SCATTER_PITCH, VIEW, createProjectedCloud(250));
+    assert.equal(calls, 4);
+  });
+
+  it('FILL を 0 より大きく 1 以下の値で export する', () => {
+    assert.ok(FILL > 0 && FILL <= 1);
   });
 });

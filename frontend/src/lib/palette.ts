@@ -97,16 +97,32 @@ function mix(from: Rgb, to: Rgb, t: number): Rgb {
   };
 }
 
-/** 段 `step` の色を停止色から求める。2 色なら 63 区間、3 色なら 32 段 × 2 区間。 */
-function colorAtStep(stops: readonly Rgb[], step: number): Rgb {
+/** 段 `step` の色を `steps` 段の中で停止色から求める。2 色なら steps−1 区間、3 色なら半分ずつの 2 区間。 */
+function colorAtStep(stops: readonly Rgb[], step: number, steps: number): Rgb {
   if (stops.length === 2) {
-    return mix(stops[0], stops[1], step / (PALETTE_STEPS - 1));
+    return mix(stops[0], stops[1], step / (steps - 1));
   }
-  const half = PALETTE_STEPS / 2;
+  const half = Math.floor(steps / 2);
   if (step < half) {
     return mix(stops[0], stops[1], step / half);
   }
-  return mix(stops[1], stops[2], (step - half) / (half - 1));
+  return mix(stops[1], stops[2], (step - half) / (steps - half - 1));
+}
+
+/**
+ * 不透明度を焼き込んだ色文字列を作る。
+ *
+ * 色文字列のテンプレートをこの 1 箇所に閉じ込めるのは、色の直値が `.ts` に散らない規律を
+ * 静的検査(テンプレートの出現が palette.ts の 1 箇所)で確かめられるようにするため(spec.md §6.4)。
+ */
+function toColorString(c: Rgb, alpha: number): string {
+  return `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`;
+}
+
+function assertStops(name: string, stops: readonly Rgb[]): void {
+  if (stops.length !== 2 && stops.length !== 3) {
+    throw new Error(`${name}: 停止色は 2 色または 3 色でなければならない(${stops.length} 色)`);
+  }
 }
 
 /**
@@ -115,21 +131,32 @@ function colorAtStep(stops: readonly Rgb[], step: number): Rgb {
  *
  * 不透明度を文字列に焼き込むのは、描画で `globalAlpha` を帯ごとに切り替えずに済ませ、
  * `fillStyle` の設定回数をバケット数で抑えるため(spec.md §6.4)。
- * `rgba` 形式の文字列を作るのはこの関数だけにし、色の直値が `.ts` に散らないようにする(Requirement 6.1)。
+ * `rgba` 形式の文字列はこのモジュールの `rgba` だけが作り、色の直値が `.ts` に散らないようにする(Requirement 6.1)。
  */
 export function buildRamp(stops: readonly Rgb[]): string[][] {
-  if (stops.length !== 2 && stops.length !== 3) {
-    throw new Error(`buildRamp: 停止色は 2 色または 3 色でなければならない(${stops.length} 色)`);
-  }
+  assertStops('buildRamp', stops);
   const ramp: string[][] = [];
   for (let band = 0; band < DEPTH_BANDS; band += 1) {
-    const alpha = BAND_ALPHA[band];
-    const row: string[] = [];
-    for (let step = 0; step < PALETTE_STEPS; step += 1) {
-      const c = colorAtStep(stops, step);
-      row.push(`rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`);
-    }
-    ramp.push(row);
+    ramp.push(buildShadowRamp(stops, PALETTE_STEPS, BAND_ALPHA[band]));
   }
   return ramp;
+}
+
+/**
+ * 停止色(2 色または 3 色)を `steps` 段に補間し、`alpha` を焼き込んだ色文字列を返す。
+ *
+ * 影の色の表(構造 × 8 段)を作るために使う(spec.md §6.4)。段数を引数にしているのは、
+ * 影は点より段を粗くして `fillStyle` の設定回数を面ごと 24 回以下に抑えるため(Requirement 4.5)。
+ * `buildRamp` もこの関数で帯ごとの行を作り、色文字列のテンプレートを共有する。
+ */
+export function buildShadowRamp(stops: readonly Rgb[], steps: number, alpha: number): string[] {
+  assertStops('buildShadowRamp', stops);
+  if (!Number.isInteger(steps) || steps < 2) {
+    throw new Error(`buildShadowRamp: 段数は 2 以上の整数でなければならない(${steps})`);
+  }
+  const row: string[] = [];
+  for (let step = 0; step < steps; step += 1) {
+    row.push(toColorString(colorAtStep(stops, step, steps), alpha));
+  }
+  return row;
 }

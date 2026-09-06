@@ -64,7 +64,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 
 ## タスク一覧
 
-- [ ] 1. パネルの幾何と縦面の重み(純粋なモジュール)
+- [x] 1. パネルの幾何と縦面の重み(純粋なモジュール)
   - [x] 1.1 `panes.ts` と `panes.test.ts` を作り、`Vec3` の import 元を `panes.ts` に移す
     _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 6.2_
     _Boundary: frontend/src/lib(幾何)_
@@ -73,8 +73,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 仕様参照: spec.md §5.2・§6.1・Requirement 1・6.2
     - 検証コマンド: `(cd frontend && npm test)` が終了コード 0 で `panes.test.ts` が実行されている / `orbit.test.ts`・`project.test.ts` が通る(6.2) / (1.6)`grep -c "Math\.\(sin\|cos\)(" frontend/src/lib/panes.ts` が 2 / `(cd frontend && npx tsc --noEmit)` が終了コード 0
 
-- [ ] 2. 影の投影と影の色の表(純粋なモジュール)
-  - [ ] 2.1 `projectPointsOnto` を `project.ts` に、`buildShadowRamp` を `palette.ts` に足す
+- [x] 2. 影の投影と影の色の表(純粋なモジュール)
+  - [x] 2.1 `projectPointsOnto` を `project.ts` に、`buildShadowRamp` を `palette.ts` に足す
     _Requirements: 4.1, 4.2, 4.3, 4.4, 4.6_
     _Boundary: frontend/src/lib(投影・パレット)_
     _Depends: 1.1_
@@ -133,3 +133,4 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 ## Implementation Notes
 
 - 1.1 完了(2026-09-07): `panes.ts`・`panes.test.ts` を作成。`Vec3` の定義元を `panes.ts` へ移し、`project.ts` は `panes.ts` から import、`axes.ts` は 5.1 で削除するまで `Vec3` を再 export するだけに変えた(既存の import を壊さないため)。検証: `npm test` 46 件 pass(`panes.test.ts` 10 件を含む)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `grep -c "Math\.\(sin\|cos\)(" panes.ts` = 2。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)
+- 2.1 完了(2026-09-07): `projectPointsOnto` と `FILL` の export を `project.ts` に、`buildShadowRamp(stops, steps, alpha)` を `palette.ts` に追加。`buildRamp` は `buildShadowRamp` で帯ごとの行を作る形に改め、色文字列のテンプレートを `palette.ts` の 1 関数に閉じた。引数の順は spec.md §5.4 の `(points, axis, value, stride, yaw, pitch, view, out)` に従った(本ファイルの Interfaces 欄は `view` と `yaw, pitch` の順が逆で、spec.md を正とする)。`project.test.ts` の `Vec3` の import 元を `axes.ts` から `panes.ts` へ移した(5.1 の削除に備える)。検証: `npm test` 57 件 pass(2.1 で 11 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / (4.4)テストで三角関数 4 回を確認 / (8.5)`grep -rn "rgba(" frontend/src --include='*.ts' --include='*.tsx' | grep -v "\.test\.ts"` が `palette.ts` の 1 箇所

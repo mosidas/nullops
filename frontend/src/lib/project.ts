@@ -21,8 +21,8 @@ export const SCATTER_PITCH = -0.42;
  */
 const FOCAL = 3.2;
 
-/** 描画領域の短辺に対する点群の広がり。1.0 にすると枠の縁に点が触れる。 */
-const FILL = 0.78;
+/** 描画領域の短辺に対する点群の広がり。1.0 にすると枠の縁に点が触れる。ラベルの画像の寸法にも使うため export する(spec.md §5.3)。 */
+export const FILL = 0.78;
 
 /**
  * モデル座標の 1 点を、回転と透視投影を経てキャンバス座標へ落とす。
@@ -114,6 +114,67 @@ export function projectPoints(
     out.sx[i] = halfWidth + x1 * scale * radius;
     out.sy[i] = halfHeight - y2 * scale * radius;
     out.depth[i] = z2;
+  }
+  out.length = length;
+}
+
+/**
+ * 点群を `axis` の座標を `value` に固定した面へ直交投影してから、`projectPoints` と同じ変換で `out` に書く。
+ * `stride` 個おきに 1 点を採る(影の間引き。spec.md §5.4)。
+ *
+ * `projectPoints` を呼び直さず同じ式を書いているのは、点を面へ落とす置き換えを点ごとに
+ * 分岐せずに済ませるため(`axis` の判定をループの外で 3 つの係数に畳む)。
+ * 三角関数は先頭で 4 回だけ評価する(Requirement 4.4)。
+ */
+export function projectPointsOnto(
+  points: readonly Vec3[],
+  axis: 'x' | 'y' | 'z',
+  value: -1 | 1,
+  stride: number,
+  yaw: number,
+  pitch: number,
+  view: { width: number; height: number },
+  out: ProjectedCloud,
+): void {
+  // 不正な stride は 1 として扱い、画面を止めない(Requirement 4.2)。
+  const step = Number.isInteger(stride) && stride >= 1 ? stride : 1;
+  // 固定する成分だけ係数を 0 にし、その軸の値を value で置く。
+  const keepX = axis === 'x' ? 0 : 1;
+  const keepY = axis === 'y' ? 0 : 1;
+  const keepZ = axis === 'z' ? 0 : 1;
+  const fixedX = axis === 'x' ? value : 0;
+  const fixedY = axis === 'y' ? value : 0;
+  const fixedZ = axis === 'z' ? value : 0;
+
+  const cosYaw = Math.cos(yaw);
+  const sinYaw = Math.sin(yaw);
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
+  const halfWidth = view.width / 2;
+  const halfHeight = view.height / 2;
+  const radius = Math.min(halfWidth, halfHeight) * FILL;
+
+  const capacity = out.sx.length;
+  let length = Math.ceil(points.length / step);
+  if (length > capacity) {
+    // 容量不足はプログラマの誤りだが、画面を止めないよう書ける範囲だけ書く(Requirement 4.3)。
+    console.error('projectPointsOnto: 器の容量が点数に足りない', capacity, length);
+    length = capacity;
+  }
+
+  for (let j = 0; j < length; j += 1) {
+    const p = points[j * step];
+    const x = p.x * keepX + fixedX;
+    const y = p.y * keepY + fixedY;
+    const z = p.z * keepZ + fixedZ;
+    const x1 = x * cosYaw + z * sinYaw;
+    const z1 = -x * sinYaw + z * cosYaw;
+    const y2 = y * cosPitch - z1 * sinPitch;
+    const z2 = y * sinPitch + z1 * cosPitch;
+    const scale = FOCAL / (FOCAL - z2);
+    out.sx[j] = halfWidth + x1 * scale * radius;
+    out.sy[j] = halfHeight - y2 * scale * radius;
+    out.depth[j] = z2;
   }
   out.length = length;
 }

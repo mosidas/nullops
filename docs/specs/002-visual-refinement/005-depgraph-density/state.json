@@ -1,0 +1,11 @@
+{
+  "workflow": "sdd",
+  "unit": "depgraph-density",
+  "state": "spec-generated",
+  "approvals": {
+    "spec": false,
+    "tasks": false
+  },
+  "created": "2026-09-07",
+  "updated": "2026-09-07"
+}

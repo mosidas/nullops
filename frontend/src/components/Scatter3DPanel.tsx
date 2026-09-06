@@ -6,7 +6,17 @@ import { AXIS_SEGMENTS } from '../lib/axes';
 import { loadSnapshot, subscribeScatter } from '../lib/feed';
 import { recordFrame } from '../lib/framestats';
 import { advanceOrbit, beginDrag, createOrbit, dragBy, endDrag, type Orbit } from '../lib/orbit';
-import { type Projected, projectPoint } from '../lib/project';
+import {
+  buildRamp,
+  DEPTH_BANDS,
+  PALETTE_STEPS,
+  parseHex,
+  type Rgb,
+  rotateHue,
+  TERRAIN_CYCLE_MS,
+  TERRAIN_PHASES,
+} from '../lib/palette';
+import { createProjectedCloud, type Projected, type ProjectedCloud, projectPoint, projectPoints } from '../lib/project';
 
 /** 計測器へ渡すパネル名（spec.md §9.1）。 */
 const PANEL_NAME = 'scatter';
@@ -33,27 +43,17 @@ const EMPTY_CLOUD: Cloud = { seq: 0, points: [] };
  */
 const DEPTH_LIMIT = Math.sqrt(3);
 
-/** 描画領域の短辺に対する点の半径の比。 */
-const POINT_RADIUS_RATIO = 0.012;
+/** 構造の数（地形・球・トーラス。`ScatterPoint.s` の取りうる値の数。spec.md §6.1）。 */
+const STRUCTURE_COUNT = 3;
 
-/** 点の半径の下限（CSS ピクセル）。小さい枠でも点が消えないようにする。 */
-const MIN_POINT_RADIUS = 0.6;
+/** 1 構造あたりのバケット数（帯 × 段）。 */
+const BUCKETS_PER_STRUCTURE = DEPTH_BANDS * PALETTE_STEPS;
 
-/** 最も奥の点・最も手前の点の不透明度。 */
-const ALPHA_FAR = 0.18;
-const ALPHA_NEAR = 1.0;
+/** バケットの総数（spec.md §6.4。576）。 */
+const BUCKET_COUNT = STRUCTURE_COUNT * BUCKETS_PER_STRUCTURE;
 
-/** 重み W が 0 の点に残す割合。0 にすると W が小さい点が完全に消える。 */
-const WEIGHT_FLOOR = 0.45;
-
-/**
- * ハローの半径と不透明度の、本体に対する比（spec.md §6.3）。
- *
- * 放射グラデーションではなく同じ色の円を 2 回塗って近似する。グラデーションは
- * 点ごとにオブジェクトを作る API しかなく、毎フレーム 256 個の割り当てになるため。
- */
-const HALO_RADIUS_RATIO = 2.2;
-const HALO_ALPHA_RATIO = 0.22;
+/** 地形の位相 1 つあたりの色相の回転角（度）。36 位相で 1 周する（spec.md §6.5）。 */
+const TERRAIN_HUE_STEP_DEGREES = 360 / TERRAIN_PHASES;
 
 /** 軸線の不透明度。奥（n = 0）で 0.25、手前（n = 1）で 0.9（spec.md §6.2）。 */
 const LINE_ALPHA_FAR = 0.25;
@@ -69,13 +69,42 @@ const LINE_WIDTH = 1;
  * 規律のため（spec.md §7 9.1）。背景を transparent にすると Panel 側の
  * 背景がそのまま透けるので、退避しても画は破綻しない。
  */
-const FALLBACK_POINT_COLOR = 'white';
 const FALLBACK_BACKGROUND_COLOR = 'transparent';
-// 軸線の退避先を gray にするのは、点の white と区別がつくようにするため。
+// 軸線の退避先を gray にするのは、点の退避色 white と区別がつくようにするため。
 const FALLBACK_LINE_COLOR = 'gray';
 
+/** 停止色のトークン名。並びは低 → 高（spec.md §6.5）。 */
+const TERRAIN_STOP_TOKENS: readonly string[] = [
+  '--color-scatter-terrain-low',
+  '--color-scatter-terrain-mid',
+  '--color-scatter-terrain-high',
+];
+const SPHERE_STOP_TOKENS: readonly string[] = [
+  '--color-scatter-sphere-low',
+  '--color-scatter-sphere-high',
+];
+const TORUS_STOP_TOKENS: readonly string[] = [
+  '--color-scatter-torus-low',
+  '--color-scatter-torus-high',
+];
+
 /** 描画に使う色。マウント時に 1 度だけ解決する。 */
-type PanelColors = { point: string; background: string; axis: string; edge: string };
+type PanelColors = { background: string; axis: string; edge: string };
+
+/** 帯 × 段の色文字列の表（`buildRamp` の戻り値。不透明度 `BAND_ALPHA` を焼き込み済み）。 */
+type Ramp = string[][];
+
+/** 点の色の表。地形は位相ごとに 1 表、球・トーラスは 1 表ずつ（spec.md §6.5）。 */
+type Palettes = { terrain: Ramp[]; sphere: Ramp; torus: Ramp };
+
+/**
+ * 点群 1 フレームぶんの作業領域。点群の長さが変わったときだけ作り直す（spec.md §7 7.6）。
+ *
+ * `counts` は counting sort の計数用で、先頭に 0 を置くため長さはバケット数 + 1。
+ * `keys` は点ごとのバケット番号（0〜575 なので 16 bit で足りる）。
+ * `order` はバケット順に並べた点の添字。
+ */
+type CloudBuffers = { projected: ProjectedCloud; keys: Uint16Array; counts: Uint32Array; order: Uint32Array };
 
 /**
  * @theme のトークンを実行時に解決する。
@@ -88,16 +117,74 @@ function readToken(name: string, fallback: string): string {
   return value === '' ? fallback : value;
 }
 
-/** 1 点ぶんの描画材料。フレームごとに作り直さないよう、器を使い回す。 */
-type Plotted = { point: main.ScatterPoint; projected: Projected };
+/**
+ * 停止色のトークンをまとめて解決する。1 つでも欠けるか `#rrggbb` でなければ null。
+ *
+ * 部分的に解決して補間すると意図しない色になるため、構造ごとにまとめて退避する（spec.md §6.5）。
+ */
+function readStops(names: readonly string[]): Rgb[] | null {
+  const stops: Rgb[] = [];
+  for (const name of names) {
+    const rgb = parseHex(readToken(name, ''));
+    if (rgb === null) {
+      return null;
+    }
+    stops.push(rgb);
+  }
+  return stops;
+}
 
-// 軸線の両端の投影を受ける器。2.1 の器渡しへの繋ぎとしてモジュールに置く(3.1 で effect の寿命へ移す)。
-const axisFrom: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
-const axisTo: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
+/**
+ * 全段を退避色で埋めた表を返す（spec.md §7 6.7）。
+ *
+ * 'white' の文字列をここに直接書くのは、退避先が凍結 spec Requirement 9.2 の許容色であり、
+ * トークンの解決に失敗した状況で他のトークンに頼らないため。
+ */
+function fallbackRamp(label: string): Ramp {
+  console.error(`3D 散布図の色トークンを解決できない（${label}）。全段を退避色で描く`);
+  const ramp: Ramp = [];
+  for (let band = 0; band < DEPTH_BANDS; band += 1) {
+    ramp.push(new Array<string>(PALETTE_STEPS).fill('white'));
+  }
+  return ramp;
+}
 
-/** 奥行きの昇順（奥→手前）に並べる比較関数。毎フレーム作らないため外に置く。 */
-function byDepthAscending(a: Plotted, b: Plotted): number {
-  return a.projected.depth - b.projected.depth;
+/**
+ * パレットの表を作る。マウント時に 1 度だけ呼ぶ（spec.md §6.5、§3 前提 7）。
+ *
+ * 地形は停止色の色相を位相ぶん回してから補間する。毎フレーム補間すると段数ぶんの文字列を
+ * 作ることになり、CLAUDE.md の規約に反する（spec.md §8）。
+ */
+function buildPalettes(): Palettes {
+  const terrainStops = readStops(TERRAIN_STOP_TOKENS);
+  const terrain: Ramp[] = [];
+  if (terrainStops === null) {
+    const fallback = fallbackRamp('terrain');
+    for (let phase = 0; phase < TERRAIN_PHASES; phase += 1) {
+      terrain.push(fallback);
+    }
+  } else {
+    for (let phase = 0; phase < TERRAIN_PHASES; phase += 1) {
+      const degrees = TERRAIN_HUE_STEP_DEGREES * phase;
+      terrain.push(buildRamp(terrainStops.map((stop) => rotateHue(stop, degrees))));
+    }
+  }
+
+  const sphereStops = readStops(SPHERE_STOP_TOKENS);
+  const sphere = sphereStops === null ? fallbackRamp('sphere') : buildRamp(sphereStops);
+  const torusStops = readStops(TORUS_STOP_TOKENS);
+  const torus = torusStops === null ? fallbackRamp('torus') : buildRamp(torusStops);
+  return { terrain, sphere, torus };
+}
+
+/** 点群の長さに合わせた作業領域を作る。描画関数の外（長さが変わった分岐）でだけ呼ぶ。 */
+function allocateBuffers(length: number): CloudBuffers {
+  return {
+    projected: createProjectedCloud(length),
+    keys: new Uint16Array(length),
+    counts: new Uint32Array(BUCKET_COUNT + 1),
+    order: new Uint32Array(length),
+  };
 }
 
 /**
@@ -106,8 +193,8 @@ function byDepthAscending(a: Plotted, b: Plotted): number {
  * 描画対象は canvas のバッキングストアで、投影は CSS ピクセルで行うため、
  * devicePixelRatio ぶんの拡大は変換行列で吸収する。
  *
- * `buffer` は呼び出し側が持ち回る作業領域。毎フレーム配列を作らないための器で
- * あり、内容はこの関数が上書きする（CLAUDE.md TypeScript 規約）。
+ * `axisFrom`・`axisTo`・`buffers` は呼び出し側が持ち回る作業領域で、内容はこの関数が上書きする。
+ * この関数の中では新しいオブジェクト・配列・関数・文字列を作らない（spec.md §7 7.7、9.4）。
  */
 function render(
   ctx: CanvasRenderingContext2D,
@@ -116,7 +203,11 @@ function render(
   cloud: Cloud,
   orbit: Orbit,
   colors: PanelColors,
-  buffer: Plotted[],
+  palettes: Palettes,
+  terrainPhase: number,
+  axisFrom: Projected,
+  axisTo: Projected,
+  buffers: CloudBuffers,
 ): void {
   const scaleX = canvas.width / view.width;
   const scaleY = canvas.height / view.height;
@@ -133,64 +224,76 @@ function render(
   ctx.lineWidth = LINE_WIDTH;
   for (let i = 0; i < AXIS_SEGMENTS.length; i += 1) {
     const segment = AXIS_SEGMENTS[i];
-    const from = projectPoint(segment.from, yaw, pitch, view, axisFrom);
-    const to = projectPoint(segment.to, yaw, pitch, view, axisTo);
-    const nearness = ((from.depth + to.depth) / 2 + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
+    projectPoint(segment.from, yaw, pitch, view, axisFrom);
+    projectPoint(segment.to, yaw, pitch, view, axisTo);
+    const nearness = ((axisFrom.depth + axisTo.depth) / 2 + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
     ctx.globalAlpha = LINE_ALPHA_FAR + LINE_ALPHA_SPAN * nearness;
     ctx.strokeStyle = segment.kind === 'axis' ? colors.axis : colors.edge;
     ctx.beginPath();
-    ctx.moveTo(from.sx, from.sy);
-    ctx.lineTo(to.sx, to.sy);
+    ctx.moveTo(axisFrom.sx, axisFrom.sy);
+    ctx.lineTo(axisTo.sx, axisTo.sy);
     ctx.stroke();
   }
+  // 点の不透明度は帯ごとに色文字列へ焼き込んである（BAND_ALPHA）ため、点の描画では
+  // globalAlpha を触らない。軸線が残した値を 1 へ戻してから点を描く（spec.md §7 7.5）。
+  ctx.globalAlpha = 1;
 
   const points = cloud.points;
-  if (points.length > 0) {
-    // 点数は固定（spec.md §3 前提 3）だが、空の点群から最初の点群へ移る瞬間だけ
-    // 長さが変わる。既存の器はそのまま使い、足りないぶんだけ作る。
-    if (buffer.length !== points.length) {
-      buffer.length = points.length;
-    }
-    for (let i = 0; i < points.length; i += 1) {
-      const point = points[i];
-      const entry = buffer[i];
-      if (entry === undefined) {
-        buffer[i] = { point, projected: projectPoint(point, yaw, pitch, view, { sx: 0, sy: 0, scale: 0, depth: 0 }) };
-      } else {
-        entry.point = point;
-        projectPoint(point, yaw, pitch, view, entry.projected);
-      }
-    }
+  const projected = buffers.projected;
+  const keys = buffers.keys;
+  const counts = buffers.counts;
+  const order = buffers.order;
 
-    // 奥から手前へ描くことで、手前の点が奥の点に重なる（spec.md §7 6.4）。
-    buffer.sort(byDepthAscending);
+  // 投影は一括で行い、三角関数の評価を 4 回に抑える（spec.md §5.3）。
+  projectPoints(points, yaw, pitch, view, projected);
+  const length = projected.length;
 
-    const baseRadius = Math.min(view.width, view.height) * POINT_RADIUS_RATIO;
-    ctx.fillStyle = colors.point;
-    for (const { point, projected } of buffer) {
-      // 0（奥）〜1（手前）。透視投影の scale と同じ向きに動くが、
-      // 焦点距離に依存しない値にするため回転後の Z から求める。
-      const nearness = (projected.depth + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
-      // 1.1 で W が廃止されたため、3.1 で帯へ置き換えるまでの繋ぎとして C を重みに使う。
-      const weight = WEIGHT_FLOOR + (1 - WEIGHT_FLOOR) * point.c;
-
-      // 奥の点ほど小さく淡くする（spec.md §7 6.5）。
-      const radius = Math.max(baseRadius * projected.scale * weight, MIN_POINT_RADIUS);
-      const alpha = (ALPHA_FAR + (ALPHA_NEAR - ALPHA_FAR) * nearness) * weight;
-
-      // ハロー → 本体の順。本体がハローの上に載る（spec.md §6.3）。
-      ctx.globalAlpha = alpha * HALO_ALPHA_RATIO;
-      ctx.beginPath();
-      ctx.arc(projected.sx, projected.sy, radius * HALO_RADIUS_RATIO, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.arc(projected.sx, projected.sy, radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  // 第 1 段: 各点のバケット番号を求め、バケットごとの点数を数える（spec.md §6.4）。
+  // 旧形式の payload では s・c が無いので 0 として読む（spec.md §7 4.3）。
+  counts.fill(0);
+  for (let i = 0; i < length; i += 1) {
+    const point = points[i];
+    const nearness = (projected.depth[i] + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
+    const band = Math.min(DEPTH_BANDS - 1, Math.floor(nearness * DEPTH_BANDS));
+    const structure = Math.min(STRUCTURE_COUNT - 1, Math.max(0, point.s ?? 0));
+    const step = Math.min(PALETTE_STEPS - 1, Math.floor((point.c ?? 0) * PALETTE_STEPS));
+    const key = structure * BUCKETS_PER_STRUCTURE + band * PALETTE_STEPS + step;
+    keys[i] = key;
+    counts[key + 1] += 1;
   }
-  // 次のフレームの clearRect / fillRect が半透明にならないよう戻す（spec.md §7 5.5）。
+  // 第 2 段: 累積和でバケットの先頭位置にし、添字をバケット順へ並べる（counting sort。比較ソートを使わない。spec.md §7 7.4）。
+  for (let key = 1; key <= BUCKET_COUNT; key += 1) {
+    counts[key] += counts[key - 1];
+  }
+  for (let i = 0; i < length; i += 1) {
+    const key = keys[i];
+    order[counts[key]] = i;
+    counts[key] += 1;
+  }
+
+  // 第 3 段: バケットの昇順に描く。fillStyle の設定はバケットごとに 1 回（spec.md §7 7.2、9.6）。
+  // 並べ替えの後、counts[key] はバケット key の終端（= 次のバケットの先頭）になっている。
+  const terrain = palettes.terrain[terrainPhase];
+  let start = 0;
+  for (let key = 0; key < BUCKET_COUNT; key += 1) {
+    const end = counts[key];
+    if (end === start) {
+      continue;
+    }
+    const structure = Math.floor(key / BUCKETS_PER_STRUCTURE);
+    const band = Math.floor((key % BUCKETS_PER_STRUCTURE) / PALETTE_STEPS);
+    const step = key % PALETTE_STEPS;
+    const table = structure === 0 ? terrain : structure === 1 ? palettes.sphere : palettes.torus;
+    ctx.fillStyle = table[band][step];
+    // 奥・中の帯は 1 px、手前の帯は 2 px の正方形（spec.md §7 7.3）。
+    const size = band === DEPTH_BANDS - 1 ? 2 : 1;
+    for (let j = start; j < end; j += 1) {
+      const index = order[j];
+      ctx.fillRect(projected.sx[index], projected.sy[index], size, size);
+    }
+    start = end;
+  }
+  // 次のフレームの clearRect / fillRect が半透明にならないよう戻す（spec.md §7 7.5）。
   ctx.globalAlpha = 1;
 }
 
@@ -291,17 +394,24 @@ export function Scatter3DPanel(): React.JSX.Element {
     // 色はマウント時に 1 度だけ読む。毎フレーム読むと描画のたびに
     // スタイル計算が走る（spec.md §8 色の解決）。
     const colors: PanelColors = {
-      point: readToken('--color-accent-scatter', FALLBACK_POINT_COLOR),
       background: readToken('--color-surface-1', FALLBACK_BACKGROUND_COLOR),
       axis: readToken('--color-text-dim', FALLBACK_LINE_COLOR),
       edge: readToken('--color-border', FALLBACK_LINE_COLOR),
     };
-    // 投影結果の器。ループの外に置いてフレームごとの確保を避ける。
-    const buffer: Plotted[] = [];
+    // 点のパレットもマウント時に 1 度だけ作る（spec.md §6.5）。
+    const palettes = buildPalettes();
+
+    // 軸線の両端の投影を受ける器。effect の寿命で 2 個だけ作り、毎フレーム同じ器を渡す（spec.md §7 5.6）。
+    const axisFrom: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
+    const axisTo: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
+    // 点群の作業領域。長さが変わった分岐（下の frame）でだけ作り直す（spec.md §7 7.6）。
+    let buffers = allocateBuffers(0);
 
     // 視点はこの effect の寿命で 1 つだけ作り、状態機械がその場で更新する（spec.md §6.1）。
     const orbit = createOrbit();
     let prevMs: number | null = null;
+    // 地形の位相の起点。マウントからの経過時間で位相を進める（spec.md §7 6.8）。
+    let startMs: number | null = null;
     let handle = 0;
 
     const frame = (nowMs: number): void => {
@@ -314,14 +424,26 @@ export function Scatter3DPanel(): React.JSX.Element {
       // 点群の更新イベントが 1 度も届かなくても回転を続ける（spec.md §7 3.8）。
       advanceOrbit(orbit, prevMs === null ? 0 : nowMs - prevMs);
       prevMs = nowMs;
+      if (startMs === null) {
+        startMs = nowMs;
+      }
 
       const view = viewRef.current;
       if (view.width === 0 || view.height === 0) {
-        // 0 除算で NaN を画面へ出さない（spec.md §7 6.6）。
+        // 0 除算で NaN を画面へ出さない（spec.md §7 6.6、8.4）。
         return;
       }
 
-      render(ctx, canvas, view, cloudRef.current, orbit, colors, buffer);
+      const cloud = cloudRef.current;
+      // 点数は固定（spec.md §3 前提 3）だが、空の点群から最初の点群へ移る瞬間だけ長さが変わる。
+      // そのときだけ器を作り直す（spec.md §7 7.6）。
+      if (cloud.points.length !== buffers.order.length) {
+        buffers = allocateBuffers(cloud.points.length);
+      }
+      const elapsedMs = nowMs - startMs;
+      const terrainPhase = Math.floor(((elapsedMs % TERRAIN_CYCLE_MS) / TERRAIN_CYCLE_MS) * TERRAIN_PHASES);
+
+      render(ctx, canvas, view, cloud, orbit, colors, palettes, terrainPhase, axisFrom, axisTo, buffers);
     };
 
     // ポインタ操作。前回位置は数値 2 つで持ち、イベントごとにオブジェクトを作らない。

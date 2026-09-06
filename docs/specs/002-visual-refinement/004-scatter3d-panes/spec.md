@@ -293,6 +293,8 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
 
 **対象**: §5.3 ラベルの定義と面に沿った変換 / §6.2 ラベル
 
+(3.1〜3.7 はテスト、3.8 は `Scatter3DPanel.tsx` の静的検査(描画関数の中に `fillText` が無く、ラベルの `drawImage` が 1 箇所)、3.9 は静的検査(描画順と、描画関数の最後の `setTransform` の引数)、3.10 は静的検査(`elevationLabels` の呼び出しが面の識別子の比較で囲われている)で確かめる。見た目は Requirement 10.4 の目視)
+
 **受け入れ基準**:
 3.1. `tickValues([-0.10, 2.08], 4)` が呼ばれたとき、システムは長さ 4 の昇順の配列を返し、`k` 番目の値を `-0.10 + k × 2.18 / 3`(`k = 0..3`)と 1e-9 以内で一致させなければならない。(イベント)
 3.2. `formatTick` が呼ばれたとき、システムは小数第 2 位までの文字列を返し、`-0.10`・`0.63`・`1.35`・`2.08` の 4 値と、`-0.001` に対して `"0.00"`(負の 0 を出さない)を返さなければならない。(イベント)
@@ -309,6 +311,8 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
 
 **対象**: §5.4 影の投影 / §6.4 影の描画規則
 
+(4.1〜4.4・4.6 はテスト、4.5 は `Scatter3DPanel.tsx` の静的検査(影の `fillStyle` の代入がバケットのループの中に 1 箇所、`fillRect` の幅と高さが 1)、4.7 は静的検査(描画順)、4.8 は静的検査(バケット順の配列を作る呼び出しが面のループの外に 1 箇所で、`.sort(` が 0 件)で確かめる。見た目は Requirement 10.6 の目視)
+
 **受け入れ基準**:
 4.1. `projectPointsOnto(points, axis, value, stride, …)` が呼ばれたとき、システムは `ceil(points.length / stride)` 個の点を書き、各点の `sx`・`sy`・`depth` を「`axis` の成分を `value` に置き換えた点を `projectPoint` に渡した結果」と 1e-3 以内で一致させなければならない。(イベント)
 4.2. `stride` が 1 未満または非整数の場合、システムは 1 として扱い、例外を投げてはならない。(異常系)
@@ -322,6 +326,8 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
 ### Requirement 5: 地(背景)
 
 **対象**: §5.5 地のノイズ / §6.5 地の生成規則
+
+(5.1〜5.4 はテスト、5.5 は `Scatter3DPanel.tsx` の静的検査(地の描画が `drawImage` 1 箇所で、描画関数の中に枠全体を塗る `fillRect` が無い)、5.6 は静的検査(画像を作る呼び出しが寸法と `devicePixelRatio` の比較で囲われ、毎フレームの経路に無い)、5.7 は静的検査(`getContext` の `null` 分岐)で確かめる。見た目は Requirement 10.5 の目視)
 
 **受け入れ基準**:
 5.1. `buildNoise(48, seed)` が呼ばれたとき、システムは長さ 2304 の `Float32Array` を返し、すべての値を 0 以上 1 以下にしなければならない。(イベント)
@@ -366,6 +372,8 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
 ### Requirement 9: 検証手段の成立と描画の負荷(非機能)
 
 **対象**: §5.1 `Scatter3DPanel` / §5.6 テストの実行コマンド / §6.7 描画順
+
+(9.1・9.6 は完了時の計測、9.2 はコマンドの実行、9.3 は `Scatter3DPanel.tsx` の静的検査(描画関数の中に `new`・配列リテラル・オブジェクトリテラル・アロー関数・テンプレート文字列・`concat`・`map`・`filter` が無く、除外の 3 箇所が比較で囲われている)、9.4 は静的検査(`grep -n \"arc(\|\.sort(\" frontend/src/components/Scatter3DPanel.tsx frontend/src/lib/scatter*.ts` が 0 件)、9.5 は静的検査(呼び出し回数の数え上げ)で確かめる)
 
 **受け入れ基準**:
 9.1. 完了時に `wails build -devtools` のビルドを起動し `window.nullops.enableFrameStats()` で計測したとき(手順は凍結済み `docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md` B 節。1440×900)、システムは計測対象 5 パネル(`commit`・`depgraph`・`gauge`・`scatter`・`timeseries`)のいずれについても、報告の最後の 6 行(30 秒ぶん)すべてで p95 が 20 ミリ秒以上である状態にしてはならない(#3 spec Requirement 9.1 と同じ集計規則)。(イベント)

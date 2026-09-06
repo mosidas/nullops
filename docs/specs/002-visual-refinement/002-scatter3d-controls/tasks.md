@@ -99,8 +99,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 仕様参照: spec.md §5.1 事後条件・エラー, §3 前提 6・8, §8 Pointer Events とキャプチャ, Requirement 1・6・7
     - 検証コマンド: `(cd frontend && npm run lint)` / `(cd frontend && npx tsc --noEmit)` が終了コード 0 / `grep -nE "touch-none|cursor-grab" frontend/src/components/Scatter3DPanel.tsx` が 1 件以上(7.3・7.1) / `grep -c "addEventListener" frontend/src/components/Scatter3DPanel.tsx` と `grep -c "removeEventListener" frontend/src/components/Scatter3DPanel.tsx` が等しい(6.6) / `grep -nE "pointerdown|pointermove|pointerup|pointercancel|lostpointercapture|'blur'" frontend/src/components/Scatter3DPanel.tsx` に 6 種すべてが現れる / `grep -n "setPointerCapture" frontend/src/components/Scatter3DPanel.tsx` が `try` の内側にある(6.5) / `grep -nE "button === 0|isPrimary" frontend/src/components/Scatter3DPanel.tsx` が各 1 件以上(1.4) / `grep -nE "mousedown|mousemove|mouseup" frontend/src/components/Scatter3DPanel.tsx` が 0 件 / `wails build` が終了コード 0
     - Requirement 6.3・6.5・6.6 の非目視の検証(内蔵レビューゲート 2 回目の Nit 1 への受け皿。前提 6 の「10.6〜10.8」は目視ではこの 3 項目を確かめられないため、ここで検証する): (6.3 `pointercancel` で `endDrag`)`grep -nE "'pointercancel'" frontend/src/components/Scatter3DPanel.tsx` が 1 件以上で、そのリスナーが `endDrag` を呼ぶ関数と同一であること(コードの検査。`pointerup`・`pointercancel`・`lostpointercapture`・`blur` の 4 つが同じ 1 関数を登録している) / (6.5 `setPointerCapture` の例外)`grep -n -B2 -A4 "setPointerCapture" frontend/src/components/Scatter3DPanel.tsx` に `try` と `catch` が現れ、`catch` 節が `endDrag` を呼ぶこと。`endDrag` 自体が `auto` へ戻すことは `orbit.test.ts` の「endDrag でヨーを保ち」「auto 中の endDrag は何もしない」で検証済み(状態機械のテスト) / (6.6 アンマウント時の解除)`grep -c "addEventListener" frontend/src/components/Scatter3DPanel.tsx` と `grep -c "removeEventListener" frontend/src/components/Scatter3DPanel.tsx` が等しく、`removeEventListener` がすべて effect のクリーンアップ関数(`return () => {` の内側)にあること(コードの検査) / いずれもドラッグ中のアンマウントで `endDrag` を呼ばなくても `Orbit` は effect と共に捨てられるため、状態の残留は起きない(§5.1 事後条件の「全部解除」はリスナーの解除を指す)
-- [ ] 4. 最終検証(静的検査・目視・計測)
-  - [ ] 4.1 検証コマンドを Global Constraints の順で全部通し、人間が行う目視(Requirement 10.1〜10.8)と p95 の計測(9.1)の手順・合格条件を `## Implementation Notes` に整理する。実行環境で確認できたものは結果を、できなかったものは未検証項目として残す(前 unit `001-dashboard-layout` の Implementation Notes と同じ形式)。p95 の判断基準は Global Constraints の「13 回 18.0 ms」を用い、超えた場合の削る候補(ハロー → 稜線)を spec.md §8 のとおり記す
+- [x] 4. 最終検証(静的検査・目視・計測)
+  - [x] 4.1 検証コマンドを Global Constraints の順で全部通し、人間が行う目視(Requirement 10.1〜10.8)と p95 の計測(9.1)の手順・合格条件を `## Implementation Notes` に整理する。実行環境で確認できたものは結果を、できなかったものは未検証項目として残す(前 unit `001-dashboard-layout` の Implementation Notes と同じ形式)。p95 の判断基準は Global Constraints の「13 回 18.0 ms」を用い、超えた場合の削る候補(ハロー → 稜線)を spec.md §8 のとおり記す
     _Requirements: 8.3, 9.1, 9.2, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8_
     _Boundary: Verification_
     _Depends: 3.2_
@@ -108,3 +108,57 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 対象ファイル: `docs/specs/002-visual-refinement/002-scatter3d-controls/tasks.md`(変更。`## Implementation Notes` のみ)
     - 仕様参照: spec.md Requirement 9・10, §3 前提 5, `docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md` B 節, `docs/specs/002-visual-refinement/001-dashboard-layout/tasks.md` Implementation Notes
     - 検証コマンド: `(cd frontend && npm ci) && wails build && go vet ./... && go test ./... && (cd frontend && npm test) && (cd frontend && npm run lint)` がこの順で実行され、すべて終了コード 0(Global Constraints の検証の前提) / `git diff --name-only main...HEAD -- '*.go' frontend/src/lib/framestats.ts frontend/src/lib/feed.ts` が 0 件(8.3・§2 対象外) / `wails build -devtools` のビルドで B 節の手順により p95 を計測し、5 パネルとも 20 ms 以下であることを記録(実行できない環境では未検証項目として手順を残す)
+
+## Implementation Notes
+
+### 進捗台帳
+
+| サブタスク | 状態 | コミット |
+| :-- | :-- | :-- |
+| 1.1 視点の状態機械 `orbit.ts` と `npm test` | 完了 | `0df3c7c` |
+| 2.1 軸線の幾何 `axes.ts` と `projectPoint` の型 | 完了 | `fb2e17b` |
+| 3.1 描画の統合(軸線 → ハロー → 本体) | 完了 | `11f47ba` |
+| 3.2 Pointer Events・キャプチャ・`blur`・カーソル | 完了 | `abd02c9` |
+| 4.1 検証コマンドと本節の整理 | 完了(目視・計測は人間へ委ねる) | 本節を含むコミット |
+
+### 実行した検証コマンドと結果(4.1、Global Constraints の順)
+
+| コマンド | 結果 |
+| :-- | :-- |
+| `(cd frontend && npm ci)` | 成功(脆弱性 0 件) |
+| `wails build` | 成功(`build/bin/nullops.app` を生成) |
+| `go vet ./...` | 成功 |
+| `go test ./...` | 成功(`nullops`・`nullops/feed`) |
+| `(cd frontend && npm test)` | 21 件成功・0 件失敗(orbit 16・axes 5) |
+| `(cd frontend && npm run lint)` | 成功(26 ファイル、指摘 0) |
+| `(cd frontend && npx tsc --noEmit)` | 成功 |
+| `git diff --name-only main...HEAD -- '*.go' frontend/src/lib/framestats.ts frontend/src/lib/feed.ts` | 0 件(8.3・§2 対象外を変えていない) |
+| 3.1 の静的検査 | 色の直値 0 件(4.6)/ `ctx.arc(` 2 箇所・点のループ 1 つ(9.3)/ `--color-text-dim`・`--color-border`・`--color-accent-scatter` 各 1 件 / `globalAlpha = 1` 1 件(5.5)/ 軸線の `stroke()` が点の `fill()` より前(4.5)/ `YAW_RATE_RAD_PER_SEC`・`MAX_FRAME_MS`・`SCATTER_PITCH` は `Scatter3DPanel.tsx` から消えた |
+| 3.2 の静的検査 | `addEventListener` 6・`removeEventListener` 6 で等しく、解除はすべてクリーンアップ関数の内側(6.6)/ `pointerup`・`pointercancel`・`lostpointercapture`・`blur` が同じ 1 関数 `stopDrag` を登録(6.3)/ `setPointerCapture` は `try` の内側で `catch` が `endDrag` を呼ぶ(6.5)/ `button === 0`・`isPrimary` 各 1 件(1.4)/ `mouse*` 0 件 / `touch-none`・`cursor-grab` あり(7.3・7.1) |
+
+### 人間(中継役)がホストで確かめる項目 — 未検証
+
+いずれも本セッションでは実行していない(GUI とホストの計測が必要)。
+
+**A. 配布ビルドの目視(Requirement 10.1〜10.8)**
+
+1. ビルドと起動: `wails build` の後 `open build/bin/nullops.app`。ウィンドウ 1440×900。
+2. 10.1: 起動後 30 秒放置する。合格: 中央の 3D 散布図に 3 軸(淡い)と立方体の稜線 12 本(さらに淡い)が見え、点群と一緒に回り続ける(止まらない)。
+3. 10.5: 点を見る。合格: 各点の本体の外側に、本体より大きく淡い同色の輪(ハロー)が見える。
+4. 10.2: 枠の上で左ボタンを押しながら左右・上下へ動かす。合格: 左右で点群がヨー方向に、上下でピッチ方向に追従する(自動回転は止まる)。
+5. 10.3・10.4: ボタンを離して 30 秒観察する。合格: 離した直後から自動回転が再開し、ピッチは 2 秒以内に起動時と同じ斜め上からの画へ滑らかに戻る。ヨーは離した位置から続く(巻き戻らない)。
+6. 10.6: 枠の内側でドラッグを始め、ポインタを枠の外(隣のパネルやウィンドウの外)へ出す。合格: 枠の外でも視点が追従し続け、枠の外でボタンを離した時点で自動回転が再開する。
+7. 10.7: ドラッグ中に Cmd+Tab で別アプリへ切り替え、そこでボタンを離してから戻る。合格: 戻った時点で自動回転しており、ポインタを動かしても視点が追従しない。
+8. 10.8: 枠の上にポインタを置く。合格: カーソルが `grab`(開いた手)になり、ドラッグ中は `grabbing`(握った手)になる。ドラッグでページのスクロールやテキスト選択が起きない。
+
+**B. p95 の計測(Requirement 9.1)**
+
+1. `wails build -devtools` の後 `open build/bin/nullops.app`。ウィンドウ 1440×900。
+2. 凍結済み `docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md` B 節の手順どおり、devtools のコンソールで `window.nullops.enableFrameStats()` を呼び、放置して計測する。
+3. 合格: `commit`・`depgraph`・`gauge`・`scatter`・`timeseries` の 5 パネルとも p95 ≦ 20 ms。判断の基準は Global Constraints の「2026-09-06 に 13 回測り 5 パネルとも 18.0 ms」。
+4. 超えた場合の削る候補(spec.md §8・§3 前提 5): まずハロー(`Scatter3DPanel.tsx` の `HALO_*` を使う `arc` と `fill` の 1 組)、次に稜線(`AXIS_SEGMENTS` の `edge` 12 本)。いずれも spec.md の受け入れ基準 5.1・4.1 に触れるため、削る判断は人間に委ねる(本 unit では実施しない)。
+
+### 文書と実物の食い違い・見送った指摘
+
+- tasks.md 3.2 は「`cursor-grab`(auto)/ `cursor-grabbing`(drag)」をクラス名で持たせると読めるが、実装は `className` に `cursor-grab` を置き、drag 中は `canvas.style.cursor = 'grabbing'` で上書きする(3.2 本文の「`canvas.style.cursor` またはクラス切り替え」の前者)。Tailwind の未使用クラス `cursor-grabbing` が CSS に生成されない前提でも動くため、この形にした。
+- 3.2 のクリーンアップでは `endDrag` を呼ばない。tasks.md 3.2 の末尾の注記どおり、`Orbit` は effect と共に捨てられ状態は残らない。

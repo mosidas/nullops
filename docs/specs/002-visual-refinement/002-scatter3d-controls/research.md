@@ -18,4 +18,5 @@
 - `frontend/src/lib/project.ts`: `projectPoint` は純関数。ヨー(Y 軸)→ ピッチ(X 軸)の順に回し、`FOCAL = 3.2` の透視投影で落とす。前面(z=1)の点はヨーが増えると右へ、ピッチが増えると下へ動く(spec.md Requirement 2.1・2.2 の向きの根拠)。
 - `frontend/src/app/globals.css`: `--color-text-dim: #8b97b0`・`--color-border: #2a3242` があり、軸線に流用できる。
 - `frontend/package.json`: `scripts` は `dev`・`build`・`start`・`lint`・`format` のみ。テストランナーは無く、`frontend/src` に `*.test.*` は無い。`@types/node` は `^26`。
-- unit #1 の計測: 5 パネルすべて p95 = 18.0 ms・mean 16.7 ms(13 回の出力で同値)。3D 散布図の描画面積は 469×438 から 589×661 へ約 1.9 倍に広がった。
+- unit #1 の計測(中継役の報告による。リポジトリ・PR #34 には記録が無い): 人間が新しい配置で計測し、5 パネルすべて p95 = 18.0 ms・mean 16.7 ms(13 回の出力で同値)。3D 散布図の描画面積は 469×438 から 589×661 へ約 1.9 倍に広がった。
+- 実環境の Node.js: v24.16.0(レビューゲートの dev-reviewer が確認)。

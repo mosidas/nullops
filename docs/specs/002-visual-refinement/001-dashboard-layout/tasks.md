@@ -54,7 +54,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 対象ファイル: `frontend/src/components/DashboardGrid.tsx`(変更), `frontend/src/components/Panel.tsx`(変更)
     - 仕様参照: spec.md §5.1 `DashboardGrid`, §5.2 `Panel`, §6.1 格子と 6 枠の配置, §8 実現方針
     - 検証コマンド: `(cd frontend && npm run lint)` / `grep -nE "h2|Children|console\.error|title" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -nE "#[0-9a-fA-F]{3,8}|rgba?\(" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -n "use client" frontend/src/components/DashboardGrid.tsx frontend/src/components/Panel.tsx` が 0 件 / `grep -oE "\b(timeseries|gauge|log|scatter|depgraph|commit)\b" frontend/src/components/Panel.tsx | sort -u | wc -l` が 6(対応表に 6 slot の鍵が重複なく揃っている)かつ `grep -oE "\[grid-area:(timeseries|gauge|log|scatter|depgraph|commit)\]" frontend/src/components/Panel.tsx | sort -u | wc -l` が 6(各鍵の値が同名の領域を指す) / この時点では `page.tsx` が旧契約のため `wails build` の型検査は通らない(1.2 で緑にする)
-  - [ ] 1.2 `Home` を新しい契約に合わせる。`DashboardGrid` に `panels` として §6.2 の対応で 6 つの slot すべてにパネル要素を渡し、`PANEL_TITLES` 等の見出し文字列の定数・`panelBody` の分岐・`Panel` の直接使用・配置の数値を持たない形にする。`'use client'` は付けない
+  - [x] 1.2 `Home` を新しい契約に合わせる。`DashboardGrid` に `panels` として §6.2 の対応で 6 つの slot すべてにパネル要素を渡し、`PANEL_TITLES` 等の見出し文字列の定数・`panelBody` の分岐・`Panel` の直接使用・配置の数値を持たない形にする。`'use client'` は付けない
     _Requirements: 3.1, 3.3, 3.5, 4.2, 7.2, 7.3, 7.4, 7.5_
     _Boundary: Home_
     _Depends: 1.1_

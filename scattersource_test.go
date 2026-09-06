@@ -52,6 +52,16 @@ func TestScatterSourceNextLengthAndSeq(t *testing.T) {
 		if cloud.Seq != i {
 			t.Fatalf("Seq が %d ではない: %d", i, cloud.Seq)
 		}
+		var counts [scatterStructureCount]int
+		for _, p := range cloud.Points {
+			counts[p.S]++
+		}
+		if counts[1] != pointCount/6 || counts[2] != pointCount/6 {
+			t.Fatalf("球・トーラスの配分が pointCount/6 ではない: 球 %d トーラス %d", counts[1], counts[2])
+		}
+		if counts[0] != pointCount-2*(pointCount/6) {
+			t.Fatalf("地形の点数が残りに一致しない: %d", counts[0])
+		}
 	}
 }
 
@@ -103,9 +113,9 @@ func TestScatterSourceConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// 受け入れ基準 2.5: 1000 回連続で呼んでも全点が単位立方体に収まる。
+// 受け入れ基準 2.7: 1000 回連続で呼んでも全点が座標・S・C の範囲に収まる。
 func TestScatterSourceKeepsPointsInUnitCube(t *testing.T) {
-	s := newTestScatterSource(t, 256)
+	s := newTestScatterSource(t, 600)
 
 	for frame := range 1000 {
 		cloud := s.Next().(ScatterCloud)
@@ -125,7 +135,7 @@ func TestScatterSourceKeepsPointsInUnitCube(t *testing.T) {
 	}
 }
 
-// 受け入れ基準 3.1: 直前のフレームと少なくとも 1 点の座標が異なる。
+// 受け入れ基準 3.5: 直前のフレームと少なくとも 1 点の座標または C が異なる。
 func TestScatterSourcePointsMoveEachFrame(t *testing.T) {
 	s := newTestScatterSource(t, 64)
 	prev := s.Next().(ScatterCloud)
@@ -146,39 +156,161 @@ func TestScatterSourcePointsMoveEachFrame(t *testing.T) {
 	}
 }
 
-// 受け入れ基準 3.2: 1000 回後の座標の標準偏差が初回の 0.5〜2.0 倍に留まる。
-func TestScatterSourceSpreadStaysStable(t *testing.T) {
-	s := newTestScatterSource(t, 256)
+// 受け入れ基準 3.1〜3.4・3.6・3.7: 各点が所属する構造の幾何に載り、地形の形は固定で高さだけが位相で変わる。
+//
+// 位相は Next ごとに 1 段進み、生成は進める前の位相で行う(spec.md §5.1)。
+// したがって Seq 番目の点群の位相は (Seq − 1) mod 120 段である。
+func phaseOfSeq(seq uint64) float64 {
+	return float64((seq-1)%scatterPhaseSteps) * scatterPhaseStep
+}
 
-	first := coordStdDev(s.Next().(ScatterCloud))
-	var last float64
-	for range 1000 {
-		last = coordStdDev(s.Next().(ScatterCloud))
+func TestScatterSourceTerrain(t *testing.T) {
+	const pointCount = 600
+	s := newTestScatterSource(t, pointCount)
+	first := s.Next().(ScatterCloud)
+
+	t.Run("3.1 高さ場に載り床と天井の間にある", func(t *testing.T) {
+		phase := phaseOfSeq(first.Seq)
+		for i, p := range first.Points {
+			if p.S != 0 {
+				continue
+			}
+			h := terrainHeight(s.peaks[:], p.X, p.Z, phase)
+			if math.Abs(p.Y-h) > 1e-4 {
+				t.Fatalf("点 %d の高さが高さ場と食い違う: y=%v h=%v", i, p.Y, h)
+			}
+			if p.Y < terrainFloor || p.Y > terrainTop {
+				t.Fatalf("点 %d の高さが [%v, %v] の外にある: %v", i, terrainFloor, terrainTop, p.Y)
+			}
+		}
+	})
+
+	t.Run("3.7 C が高さの正規化に一致する", func(t *testing.T) {
+		for i, p := range first.Points {
+			if p.S != 0 {
+				continue
+			}
+			want := (p.Y - terrainFloor) / (terrainTop - terrainFloor)
+			if math.Abs(p.C-want) > 1e-3 {
+				t.Fatalf("点 %d の C が期待と異なる: got %v want %v", i, p.C, want)
+			}
+		}
+	})
+
+	var frames []ScatterCloud
+	for range 120 {
+		frames = append(frames, s.Next().(ScatterCloud))
 	}
 
-	if ratio := last / first; ratio < 0.5 || ratio > 2.0 {
-		t.Fatalf("標準偏差の比が範囲外である: 初回 %v → 1000 回後 %v (比 %v)", first, last, ratio)
+	t.Run("3.4 100 回の Next で (x, z) が変わらない", func(t *testing.T) {
+		for f := range 100 {
+			for i, p := range frames[f].Points {
+				if p.S != 0 {
+					continue
+				}
+				if p.X != first.Points[i].X || p.Z != first.Points[i].Z {
+					t.Fatalf("フレーム %d の点 %d の (x, z) が初回と異なる: (%v, %v) → (%v, %v)",
+						f+2, i, first.Points[i].X, first.Points[i].Z, p.X, p.Z)
+				}
+			}
+		}
+	})
+
+	t.Run("3.6 121 回目の高さが 1 回目に戻る", func(t *testing.T) {
+		last := frames[119]
+		if last.Seq != 121 {
+			t.Fatalf("Seq が 121 ではない: %d", last.Seq)
+		}
+		for i, p := range last.Points {
+			if p.S != 0 {
+				continue
+			}
+			if math.Abs(p.Y-first.Points[i].Y) > 1e-4 {
+				t.Fatalf("点 %d の高さが 1 回目へ戻らない: %v → %v", i, first.Points[i].Y, p.Y)
+			}
+		}
+	})
+}
+
+func TestScatterSourceSphere(t *testing.T) {
+	s := newTestScatterSource(t, 600)
+	for range 7 {
+		cloud := s.Next().(ScatterCloud)
+		t.Run("3.2 中心からの距離が半径に等しい", func(t *testing.T) {
+			for i, p := range cloud.Points {
+				if p.S != 1 {
+					continue
+				}
+				d := math.Sqrt(sq(p.X-sphereCX) + sq(p.Y-sphereCY) + sq(p.Z-sphereCZ))
+				if math.Abs(d-sphereRadius) > 2e-4 {
+					t.Fatalf("点 %d の中心からの距離が半径と食い違う: %v", i, d)
+				}
+			}
+		})
+		t.Run("3.7 C が緯度に一致する", func(t *testing.T) {
+			for i, p := range cloud.Points {
+				if p.S != 1 {
+					continue
+				}
+				want := (p.Y - sphereCY + sphereRadius) / (2 * sphereRadius)
+				if math.Abs(p.C-want) > 1e-3 {
+					t.Fatalf("点 %d の C が期待と異なる: got %v want %v", i, p.C, want)
+				}
+			}
+		})
 	}
 }
 
-// coordStdDev は点群の全座標(X・Y・Z を区別せず)の標準偏差を返す。
-func coordStdDev(cloud ScatterCloud) float64 {
-	values := make([]float64, 0, len(cloud.Points)*3)
-	for _, p := range cloud.Points {
-		values = append(values, p.X, p.Y, p.Z)
+func TestScatterSourceTorus(t *testing.T) {
+	s := newTestScatterSource(t, 600)
+	for range 7 {
+		cloud := s.Next().(ScatterCloud)
+		phase := phaseOfSeq(cloud.Seq)
+		t.Run("3.3 トーラス面からの距離が許容誤差内", func(t *testing.T) {
+			for i, p := range cloud.Points {
+				if p.S != 2 {
+					continue
+				}
+				rho := math.Sqrt(sq(p.X-torusCX) + sq(p.Z-torusCZ))
+				d := math.Sqrt(sq(rho-torusMajor) + sq(p.Y-torusCY))
+				if math.Abs(d-torusMinor) > 2e-4 {
+					t.Fatalf("点 %d のトーラス面からの距離が許容誤差を超える: %v", i, d-torusMinor)
+				}
+			}
+		})
+		t.Run("3.7 C が環に沿った角度と位相の和に一致する", func(t *testing.T) {
+			for i, p := range cloud.Points {
+				if p.S != 2 {
+					continue
+				}
+				u := math.Atan2(p.Z-torusCZ, p.X-torusCX)
+				want := math.Mod(u+phase+4*math.Pi, 2*math.Pi) / (2 * math.Pi)
+				diff := math.Abs(p.C - want)
+				if diff > 0.5 {
+					diff = 1 - diff // 0 と 1 の境界は同一視する
+				}
+				if diff > 1e-3 {
+					t.Fatalf("点 %d の C が期待と異なる: got %v want %v", i, p.C, want)
+				}
+			}
+		})
 	}
+}
 
-	var sum float64
-	for _, v := range values {
-		sum += v
-	}
-	mean := sum / float64(len(values))
+func sq(v float64) float64 { return v * v }
 
-	var sq float64
-	for _, v := range values {
-		sq += (v - mean) * (v - mean)
+// 受け入れ基準 1.3: pointCount が 6 未満なら球・トーラスは 0 点で全点が地形になり、panic しない。
+func TestScatterSourceSmallCount(t *testing.T) {
+	s := newTestScatterSource(t, 5)
+	cloud := s.Next().(ScatterCloud)
+	if len(cloud.Points) != 5 {
+		t.Fatalf("Points の長さが 5 ではない: %d", len(cloud.Points))
 	}
-	return math.Sqrt(sq / float64(len(values)))
+	for i, p := range cloud.Points {
+		if p.S != 0 {
+			t.Fatalf("点 %d が地形ではない: S=%d", i, p.S)
+		}
+	}
 }
 
 // 受け入れ基準 4.3: Snapshot は内部状態(Seq・点の座標)を変化させない。
@@ -224,10 +356,10 @@ func TestScatterSourceSnapshotBeforeFirstNext(t *testing.T) {
 	}
 }
 
-// 受け入れ基準 10.2: 画面へ供給する点数が 256 点以下である。
+// 受け入れ基準 9.3: 画面へ供給する点数が下限と上限の範囲にある。
 func TestScatterPointCountWithinBudget(t *testing.T) {
-	if scatterPointCount > 256 {
-		t.Fatalf("scatterPointCount が 256 を超えている: %d", scatterPointCount)
+	if scatterPointCount < scatterPointCountMin || scatterPointCount > scatterPointCountMax {
+		t.Fatalf("scatterPointCount が [%d, %d] の外にある: %d", scatterPointCountMin, scatterPointCountMax, scatterPointCount)
 	}
 }
 

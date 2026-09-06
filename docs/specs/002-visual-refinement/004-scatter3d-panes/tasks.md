@@ -141,6 +141,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 - 5.1 完了(2026-09-07): `scatterImages.ts` を新規作成(地の 48×48 `ImageData` → 枠の寸法へ平滑拡大した canvas、ラベル 20 個を `fontPx × dpr` の高さで焼いた canvas。2D コンテキストを取れなければ `console.error` して null)。`Scatter3DPanel.tsx` は地 → 床 → 重みが正の縦面(塗り → 格子 → 縁 → 影)→ 点 → ラベルの順に置き換え、面の頂点 4 個・ラベルの微分 3 個・`LabelFrame`・重みの `Float64Array(4)` を `Scene` として effect の寿命で 1 度だけ作る。影のバケット順(24 バケットの counting sort)は `render` の先頭で 1 度だけ作り `drawPane` が全面で使い回す。地とラベルの画像は `canvas.width/height`(デバイス px)と `devicePixelRatio` の比較で囲った分岐でだけ作り直す。`palette.ts` の `toColorString` を export し、パネルの塗り・格子・縁の色文字列(不透明度 0.06 / 0.16 / 0.45)をマウント時に作る(`rgba(` のテンプレートは `palette.ts` の 1 箇所のまま)。`axes.ts`・`axes.test.ts` を削除。検証: `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `npm test` 70 件 pass(`axes.test.ts` の 5 件が減る) / (6.1)`AXIS_SEGMENTS`・`kind: 'axis'` 0 件 / (2.8)`wallWeights(` 1 / (3.8)`fillText(` 0・`drawImage(` 2 / (3.9)`setTransform(` 1、`transform(` は `save`・`restore` に挟まれる / (3.15・9.5)`globalAlpha = ` 4 箇所(面: `w`・`1`、ラベル: `w * w * w`・`1`) / (3.7)`0.35`・`< 8` はラベルの `drawImage` 直前の比較 / (4.8・9.4)`.sort(`・`arc(` 0 件 / (8.5)16 進の直値 0 件・`rgba(` は `palette.ts` の 1 箇所 / (3.10)`elevationLabels(` は `createScene`(マウント時)だけ / (5.5)枠全体の `fillRect` は `scene.ground === null` の退避経路だけ / (2.3)`stroke()` は `drawPane` の 2 箇所。`Scatter3DPanel.tsx` は 824 行(分離後も check.py の行数の目安を超える見込み。分割案は報告で示す)。`wails build`・`go vet ./...`・`go test ./...` も終了コード 0(5.1 のコミット後に実行)
 - 6.1 完了(2026-09-07、HEAD `7f7faf0` の分割後): Global Constraints の順で `npm ci` → `wails build` → `go vet ./...` → `go test ./...`(`nullops`・`nullops/feed` ok)→ `npm test`(70 件 pass・fail 0)→ `npm run lint`(35 files・エラー 0)がいずれも終了コード 0。(8.1・8.2)`git diff --quiet main -- scatterpoint.go scattersource.go frontend/src/lib/feed.ts frontend/src/lib/framestats.ts frontend/src/lib/orbit.ts` 終了コード 0。凍結済み文書(`001-dashboard-mvp/**`・`002-visual-refinement/001-*`〜`003-*`・本 unit の `spec.md`)も `main` と差分なし。変更禁止ファイルへの変更はなく、該当タスクへ戻す失敗はなかった
 - 7.1 完了(2026-09-07): `wails build -devtools` 終了コード 0(HEAD `dd71714`)。計測と目視の手順は下の節に書く。Requirement 9.1・9.6・10.1〜10.7 は本実装者が実行せず「未検証(中継役が実行)」とする(Global Constraints の人間の回答)
+- 7.1 中継役の実行結果(2026-09-07、HEAD `9206669` の `wails build -devtools`): **Requirement 9.1・9.6・10.1〜10.7 は中継役がホストで確かめ、いずれも満たした。** p95 は 13 回の出力を採り、5 パネルすべてで 20 ms 未満(下の「完了時」の表へ転記済み)。目視はユーザーが画面を見て「見た目は OK」と承認した。観察: 面 5 枚ぶんの格子と縁、影(点数 + 5 × ceil(点数 / 2) 回の `fillRect`)、ラベル 20 個を足したにもかかわらず、max は着手時の 19〜25 ms から 18〜21 ms へ下がった(p95・mean は同等)。unit #3 で得た「`arc`・比較ソート・`fillStyle` の切り替え回数を増やさない設計なら描画を足しても悪化しない」という見立てが、影とパネルの追加でも成り立った。影を counting sort の 24 バケットで色ごとにまとめて塗り、面ごとの `fillStyle` の切り替えを 24 回に抑えたことが効いたと見る
 
 ### 中継役がホストで確かめる項目(手順。Requirement 9.1・9.6・10)
 
@@ -156,17 +157,19 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 | scatter | 17.0〜18.0 ms | 16.7 ms | 19〜25 ms |
 | timeseries | 17.0〜18.0 ms | 16.7 ms | 19〜25 ms |
 
-**完了時(未取得。中継役が渡す)**:
+**完了時(2026-09-07。中継役がホストで取得。HEAD `9206669` の `wails build -devtools`、13 回の出力を集計)**:
 
 | パネル | p95 | mean | max |
 | :-- | :-- | :-- | :-- |
-| commit | (未取得) | (未取得) | (未取得) |
-| depgraph | (未取得) | (未取得) | (未取得) |
-| gauge | (未取得) | (未取得) | (未取得) |
-| scatter | (未取得) | (未取得) | (未取得) |
-| timeseries | (未取得) | (未取得) | (未取得) |
+| commit | 17.0〜18.0 ms | 16.7 ms | 18〜21 ms |
+| depgraph | 17.0〜18.0 ms | 16.7 ms | 18〜21 ms |
+| gauge | 17.0〜18.0 ms | 16.7 ms | 19〜21 ms |
+| scatter | 17.0〜18.0 ms | 16.7 ms | 19〜21 ms |
+| timeseries | 17.0〜18.0 ms | 16.7 ms | 19〜21 ms |
 
-**目視(Requirement 10.1〜10.7)**: 同じビルドを起動し、3D 散布図のパネルで次を確かめる。判定は各項目の合格条件による。
+判定: 5 パネルすべてで p95 が 20 ms 未満(9.1 合格)。max は 50 ms 超なし(削る順の発動なし)。着手時と比べ p95・mean は同等、max は下がった。
+
+**目視(Requirement 10.1〜10.7)**: 同じビルドを起動し、3D 散布図のパネルで次を確かめる。判定は各項目の合格条件による。結果(2026-09-07): 中継役が HEAD `9206669` のビルドで実施し、ユーザーが画面を目視して「見た目は OK」と承認した(10.1〜10.7 合格)。
 
 1. 10.1(放置): 起動後に触らず 30 秒観る。床を上から見下ろす向きで、奥を向く縦面(奥向きの度合いで濃さが変わる)と床に薄い面・3 × 3 の格子・縁が描かれ、点群と同じ回転で動く(画面に固定されない)こと。
 2. 10.2(1 周のドラッグ): ドラッグで視点を水平に 1 周回す。面とラベルが突然消える・現れることがなく、奥向きの度合いに応じて連続に濃く・薄くなること(重みが 0 の面は描かないが、重みは連続に 0 へ落ちるため飛びにならない)。
@@ -176,4 +179,4 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 6. 10.6(影): 点群の投影が奥を向く縦面と床に、点の色を保ったまま暗く写り、視点を回すと面と一緒に回ること。
 7. 10.7(既存の維持): unit #3 の点群・色・構造(#3 spec Requirement 10.1〜10.6)と unit #2 の操作(ドラッグ・復帰・カーソル。#2 spec Requirement 10)が引き続き満たされること。
 
-**未検証の受け入れ基準(中継役が実行)**: 9.1(p95 < 20 ms)・9.6(完了時の p95・mean・max の記録)・10.1〜10.7(目視)。これらは本実装者が実行していない。中継役が上の手順で確かめ、結果を本節へ転記する。
+**未検証の受け入れ基準**: なし。9.1(p95 < 20 ms)・9.6(完了時の p95・mean・max の記録)・10.1〜10.7(目視)は本実装者が実行せず、中継役が上の手順でホストで確かめて結果を本節へ転記した(2026-09-07)。

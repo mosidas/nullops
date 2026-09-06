@@ -113,8 +113,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 仕様参照: spec.md §5.1・§6.2・§6.3・§6.4・§6.5・§6.7・§8・Requirement 2・3.7〜3.10・3.15・4.5・4.7・4.8・5.5〜5.7・6・8.4・8.5・9.3〜9.5
     - 検証コマンド: `wails build` / `(cd frontend && npx tsc --noEmit)` / `(cd frontend && npm run lint)` / `(cd frontend && npm test)` が終了コード 0 / (6.1)`grep -rn "AXIS_SEGMENTS\|kind: 'axis'" frontend/src` が 0 件、`test ! -e frontend/src/lib/axes.ts` / (2.8)`grep -c "wallWeights(" frontend/src/components/Scatter3DPanel.tsx` が 1 / (3.8)`grep -c "fillText(" frontend/src/components/Scatter3DPanel.tsx` が 0、`grep -c "drawImage(" frontend/src/components/Scatter3DPanel.tsx` が 2(地 1 + ラベル 1) / (3.9)Global Constraints の基底の変換の静的検査 / (3.10)`grep -n "elevationLabels(" frontend/src/components/Scatter3DPanel.tsx frontend/src/lib/scatterImages.ts` の出現がマウント時の経路(画像の作成)にだけある / (3.15)Global Constraints のラベルの不透明度の静的検査 / (3.7)`grep -n "0\.35\|< 8" frontend/src/components/Scatter3DPanel.tsx` がラベルの `drawImage` の前の比較にある / (4.8・9.4)`grep -c "\.sort(" frontend/src/components/Scatter3DPanel.tsx` が 0、`grep -c "ctx.arc(" frontend/src/components/Scatter3DPanel.tsx` が 0(5.1 の分割後は `frontend/src/lib/scatterPanes.ts` も同じ検査の対象に含める) / (9.5)`grep -c "globalAlpha = " frontend/src/components/Scatter3DPanel.tsx` が 4 以下(面の入口・出口、ラベルの入口・出口) / (8.5)Global Constraints の色の直値の静的検査 / (5.5)背景の `fillRect` が退避経路にだけある
 
-- [ ] 6. 回帰と全体検証
-  - [ ] 6.1 検証コマンドの全体を Global Constraints の順で回し、変更禁止ファイルの不変を確かめる
+- [x] 6. 回帰と全体検証
+  - [x] 6.1 検証コマンドの全体を Global Constraints の順で回し、変更禁止ファイルの不変を確かめる
     _Requirements: 8.1, 8.2, 8.3, 9.2_
     _Boundary: リポジトリ全体_
     _Depends: 5.1_
@@ -133,6 +133,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 
 ## Implementation Notes
 
+- 6.1 完了(2026-09-07、HEAD `7f7faf0` の分割後): Global Constraints の順で `npm ci` → `wails build` → `go vet ./...` → `go test ./...`(`nullops`・`nullops/feed` ok)→ `npm test`(70 件 pass・fail 0)→ `npm run lint`(35 files・エラー 0)がいずれも終了コード 0。(8.1・8.2)`git diff --quiet main -- scatterpoint.go scattersource.go frontend/src/lib/feed.ts frontend/src/lib/framestats.ts frontend/src/lib/orbit.ts` 終了コード 0。凍結済み文書(`001-dashboard-mvp/**`・`002-visual-refinement/001-*`〜`003-*`・本 unit の `spec.md`)も `main` と差分なし。変更禁止ファイルへの変更はなく、該当タスクへ戻す失敗はなかった
 - 1.1 完了(2026-09-07): `panes.ts`・`panes.test.ts` を作成。`Vec3` の定義元を `panes.ts` へ移し、`project.ts` は `panes.ts` から import、`axes.ts` は 5.1 で削除するまで `Vec3` を再 export するだけに変えた(既存の import を壊さないため)。検証: `npm test` 46 件 pass(`panes.test.ts` 10 件を含む)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `grep -c "Math\.\(sin\|cos\)(" panes.ts` = 2。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)
 - 2.1 完了(2026-09-07): `projectPointsOnto` と `FILL` の export を `project.ts` に、`buildShadowRamp(stops, steps, alpha)` を `palette.ts` に追加。`buildRamp` は `buildShadowRamp` で帯ごとの行を作る形に改め、色文字列のテンプレートを `palette.ts` の 1 関数に閉じた。引数の順は spec.md §5.4 の `(points, axis, value, stride, yaw, pitch, view, out)` に従った(本ファイルの Interfaces 欄は `view` と `yaw, pitch` の順が逆で、spec.md を正とする)。`project.test.ts` の `Vec3` の import 元を `axes.ts` から `panes.ts` へ移した(5.1 の削除に備える)。検証: `npm test` 57 件 pass(2.1 で 11 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / (4.4)テストで三角関数 4 回を確認 / (8.5)`grep -rn "rgba(" frontend/src --include='*.ts' --include='*.tsx' | grep -v "\.test\.ts"` が `palette.ts` の 1 箇所
 - 3.1 完了(2026-09-07): `labels.ts`・`labels.test.ts` を作成。`elevationLabels` は `out` を空にしてから 5 個を書き(マウント時にだけ呼ぶため Label オブジェクトの生成を許す)、`labelFrame` は微分用のずらした点をモジュール定数の `Vec3` 1 個で使い回して新しいオブジェクトを作らない。3.4 のテストは `projectPoint` を呼ばず spec §5.3 の式を自前で計算して比較した。3.5 は既定ピッチの反転(4.1)前後の両方(±0.42)で 1° 刻み 361 点を走査し、重みが正の面の `a ≥ 0` を確認。検証: `npm test` 70 件 pass(3.1 で 13 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)

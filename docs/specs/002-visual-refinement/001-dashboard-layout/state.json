@@ -1,7 +1,7 @@
 {
   "workflow": "sdd",
   "unit": "dashboard-layout",
-  "state": "initialized",
+  "state": "spec-generated",
   "approvals": {
     "spec": false,
     "tasks": false

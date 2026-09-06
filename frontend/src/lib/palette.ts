@@ -114,8 +114,9 @@ function colorAtStep(stops: readonly Rgb[], step: number, steps: number): Rgb {
  *
  * 色文字列のテンプレートをこの 1 箇所に閉じ込めるのは、色の直値が `.ts` に散らない規律を
  * 静的検査(テンプレートの出現が palette.ts の 1 箇所)で確かめられるようにするため(spec.md §6.4)。
+ * パネルの塗り・格子・縁の色(不透明度を焼き込んだ 1 本の文字列)もこの関数で作る(#4 spec §6.3)。
  */
-function toColorString(c: Rgb, alpha: number): string {
+export function toColorString(c: Rgb, alpha: number): string {
   return `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`;
 }
 

@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 import type { main } from '../../wailsjs/go/models';
-import { AXIS_SEGMENTS } from '../lib/axes';
 import { loadSnapshot, subscribeScatter } from '../lib/feed';
 import { recordFrame } from '../lib/framestats';
+import { elevationLabels, type Label, type LabelFrame, labelFrame } from '../lib/labels';
 import { advanceOrbit, beginDrag, createOrbit, dragBy, endDrag, type Orbit } from '../lib/orbit';
 import {
   buildRamp,
+  buildShadowRamp,
   DEPTH_BANDS,
   PALETTE_STEPS,
   parseHex,
@@ -15,8 +16,18 @@ import {
   rotateHue,
   TERRAIN_CYCLE_MS,
   TERRAIN_PHASES,
+  toColorString,
 } from '../lib/palette';
-import { createProjectedCloud, type Projected, type ProjectedCloud, projectPoint, projectPoints } from '../lib/project';
+import { GRID_STOPS, PANES, type Pane, WALL_IDS, wallWeights } from '../lib/panes';
+import {
+  createProjectedCloud,
+  type Projected,
+  type ProjectedCloud,
+  projectPoint,
+  projectPoints,
+  projectPointsOnto,
+} from '../lib/project';
+import { buildGroundImage, buildLabelImages } from '../lib/scatterImages';
 
 /** 計測器へ渡すパネル名（spec.md §9.1）。 */
 const PANEL_NAME = 'scatter';
@@ -43,6 +54,21 @@ const EMPTY_CLOUD: Cloud = { seq: 0, points: [] };
  */
 const DEPTH_LIMIT = Math.sqrt(3);
 
+/** 影の間引き（点の半分）と色の段数。#4 spec §6.4。段を粗くするのは面ごとの fillStyle の設定を 24 回以下に抑えるため。 */
+const SHADOW_STRIDE = 2;
+const SHADOW_STEPS = 8;
+const SHADOW_ALPHA = 0.22;
+/** 影のバケットの総数（構造 × 段。24）。 */
+const SHADOW_BUCKET_COUNT = 3 * SHADOW_STEPS;
+
+/** パネルの塗り・格子・縁の不透明度（重み 1 のときの値。#4 spec §6.3）。色ではなく数値として置く。 */
+const PANE_FILL_ALPHA = 0.06;
+const PANE_GRID_ALPHA = 0.16;
+const PANE_EDGE_ALPHA = 0.45;
+
+/** 格子線と縁の線幅（CSS ピクセル。#4 spec Requirement 2.4）。 */
+const LINE_WIDTH = 1;
+
 /** 構造の数（地形・球・トーラス。`ScatterPoint.s` の取りうる値の数。spec.md §6.1）。 */
 const STRUCTURE_COUNT = 3;
 
@@ -55,23 +81,17 @@ const BUCKET_COUNT = STRUCTURE_COUNT * BUCKETS_PER_STRUCTURE;
 /** 地形の位相 1 つあたりの色相の回転角（度）。36 位相で 1 周する（spec.md §6.5）。 */
 const TERRAIN_HUE_STEP_DEGREES = 360 / TERRAIN_PHASES;
 
-/** 軸線の不透明度。奥（n = 0）で 0.25、手前（n = 1）で 0.9（spec.md §6.2）。 */
-const LINE_ALPHA_FAR = 0.25;
-const LINE_ALPHA_SPAN = 0.65;
-
-/** 軸線の線幅（CSS ピクセル）。 */
-const LINE_WIDTH = 1;
-
 /**
- * トークンの解決に失敗したときの退避先（spec.md §7 9.2）。
+ * トークンの解決に失敗したときの退避先（spec.md §7 9.2、#4 spec §6.6）。
  *
  * 16 進の直値を置かないのは、色の正本を globals.css の @theme に一本化する
- * 規律のため（spec.md §7 9.1）。背景を transparent にすると Panel 側の
+ * 規律のため（spec.md §7 9.1）。地を transparent にすると Panel 側の
  * 背景がそのまま透けるので、退避しても画は破綻しない。
  */
-const FALLBACK_BACKGROUND_COLOR = 'transparent';
-// 軸線の退避先を gray にするのは、点の退避色 white と区別がつくようにするため。
-const FALLBACK_LINE_COLOR = 'gray';
+const FALLBACK_GROUND_COLOR = 'transparent';
+// パネルの退避先を gray にするのは、点の退避色 white と区別がつくようにするため。
+const FALLBACK_PANE_COLOR = 'gray';
+const FALLBACK_LABEL_COLOR = 'white';
 
 /** 停止色のトークン名。並びは低 → 高（spec.md §6.5）。 */
 const TERRAIN_STOP_TOKENS: readonly string[] = [
@@ -82,8 +102,46 @@ const TERRAIN_STOP_TOKENS: readonly string[] = [
 const SPHERE_STOP_TOKENS: readonly string[] = ['--color-scatter-sphere-low', '--color-scatter-sphere-high'];
 const TORUS_STOP_TOKENS: readonly string[] = ['--color-scatter-torus-low', '--color-scatter-torus-high'];
 
-/** 描画に使う色。マウント時に 1 度だけ解決する。 */
-type PanelColors = { background: string; axis: string; edge: string };
+/**
+ * 描画に使う色。マウント時に 1 度だけ解決する。
+ *
+ * `ground` は地のトークン 2 色（画像の材料。どちらかが欠ければ null で地は `groundFallback` のべた塗り）、
+ * `groundFallback` は地の画像を作れないときのべた塗りの色（#4 spec §5.1 エラー）。
+ * `fill`・`grid`・`edge` は `--color-scatter-pane` に不透明度を焼き込んだ文字列（重み 1 のときの値）。
+ */
+type PanelColors = {
+  ground: { low: Rgb; high: Rgb } | null;
+  groundFallback: string;
+  fill: string;
+  grid: string;
+  edge: string;
+  label: string;
+};
+
+/** 影の色の表（構造 × 8 段）。地形は位相ごとに 1 表（#4 spec §6.4）。 */
+type ShadowPalettes = { terrain: string[][]; sphere: string[]; torus: string[] };
+
+/**
+ * 面とラベルの描画で使い回す器。effect の寿命で 1 度だけ作る（#4 spec §8「描画順と器」）。
+ *
+ * `weights` は縦 4 面の重み（WALL_IDS の順）、`corners` は面の頂点 4 個の投影、`labelScratch` は
+ * `labelFrame` の微分用 3 個、`frame` はラベルの変換の係数。`labels` は縦 4 面 × 5 個 = 20 個の
+ * ラベルで、`labelImages` はそれと同じ並びの画像（作れなければ null でラベルを描かない）。
+ * `ground` は枠の寸法の地の画像（作れなければ null でべた塗り）。`imageWidth`・`imageHeight`・`dpr` は
+ * 画像を作ったときの寸法で、変化の検知（作り直し）にだけ使う（Requirement 5.6）。
+ */
+type Scene = {
+  weights: Float64Array;
+  corners: [Projected, Projected, Projected, Projected];
+  labelScratch: [Projected, Projected, Projected];
+  frame: LabelFrame;
+  labels: Label[];
+  labelImages: HTMLCanvasElement[] | null;
+  ground: HTMLCanvasElement | null;
+  imageWidth: number;
+  imageHeight: number;
+  dpr: number;
+};
 
 /** 帯 × 段の色文字列の表（`buildRamp` の戻り値。不透明度 `BAND_ALPHA` を焼き込み済み）。 */
 type Ramp = string[][];
@@ -98,7 +156,17 @@ type Palettes = { terrain: Ramp[]; sphere: Ramp; torus: Ramp };
  * `keys` は点ごとのバケット番号（0〜575 なので 16 bit で足りる）。
  * `order` はバケット順に並べた点の添字。
  */
-type CloudBuffers = { projected: ProjectedCloud; keys: Uint16Array; counts: Uint32Array; order: Uint32Array };
+type CloudBuffers = {
+  projected: ProjectedCloud;
+  keys: Uint16Array;
+  counts: Uint32Array;
+  order: Uint32Array;
+  /** 影用。間引いた点（ceil(点数 / 2)）の投影と、24 バケットの counting sort の作業領域（#4 spec §6.4）。 */
+  shadow: ProjectedCloud;
+  shadowKeys: Uint8Array;
+  shadowCounts: Uint32Array;
+  shadowOrder: Uint32Array;
+};
 
 /**
  * @theme のトークンを実行時に解決する。
@@ -171,24 +239,215 @@ function buildPalettes(): Palettes {
   return { terrain, sphere, torus };
 }
 
+/** 影の全段を退避色で埋めた表。停止色の退避（`fallbackRamp`）と同じ色を使う（#4 spec §6.6）。 */
+function fallbackShadowRamp(): string[] {
+  return new Array<string>(SHADOW_STEPS).fill('white');
+}
+
+/**
+ * 影の色の表を作る。マウント時に 1 度だけ呼ぶ（#4 spec §6.4）。
+ *
+ * 点のパレット（64 段 × 3 帯）を流用すると面ごとの fillStyle の切り替えが 3 面で 1,728 回になるため、
+ * 8 段・帯なしの表を別に持つ（#4 spec §8）。停止色は点と同じトークンから読む。
+ */
+function buildShadowPalettes(): ShadowPalettes {
+  const terrainStops = readStops(TERRAIN_STOP_TOKENS);
+  const terrain: string[][] = [];
+  for (let phase = 0; phase < TERRAIN_PHASES; phase += 1) {
+    if (terrainStops === null) {
+      terrain.push(fallbackShadowRamp());
+    } else {
+      const degrees = TERRAIN_HUE_STEP_DEGREES * phase;
+      terrain.push(
+        buildShadowRamp(
+          terrainStops.map((stop) => rotateHue(stop, degrees)),
+          SHADOW_STEPS,
+          SHADOW_ALPHA,
+        ),
+      );
+    }
+  }
+  const sphereStops = readStops(SPHERE_STOP_TOKENS);
+  const torusStops = readStops(TORUS_STOP_TOKENS);
+  return {
+    terrain,
+    sphere: sphereStops === null ? fallbackShadowRamp() : buildShadowRamp(sphereStops, SHADOW_STEPS, SHADOW_ALPHA),
+    torus: torusStops === null ? fallbackShadowRamp() : buildShadowRamp(torusStops, SHADOW_STEPS, SHADOW_ALPHA),
+  };
+}
+
+/**
+ * 地・パネル・ラベルの色を解決する。マウント時に 1 度だけ呼ぶ（#4 spec §6.6）。
+ *
+ * パネルの 3 色は同じトークンに不透明度だけ変えて焼き込む。重みごとに文字列を作らず、
+ * 面ごとの不透明度は `globalAlpha` で与える（#4 spec §8）。
+ */
+function readColors(): PanelColors {
+  const low = parseHex(readToken('--color-scatter-bg-low', ''));
+  const high = parseHex(readToken('--color-scatter-bg-high', ''));
+  const pane = parseHex(readToken('--color-scatter-pane', ''));
+  const label = readToken('--color-scatter-label', '');
+  if (low === null || high === null) {
+    console.error('3D 散布図の地の色トークンを解決できない。透明で退避する');
+  }
+  if (pane === null) {
+    console.error('3D 散布図のパネルの色トークンを解決できない。退避色で描く');
+  }
+  if (parseHex(label) === null) {
+    console.error('3D 散布図のラベルの色トークンを解決できない。退避色で描く');
+  }
+  return {
+    ground: low === null || high === null ? null : { low, high },
+    // 画像を作れないときのべた塗り。トークン自体が欠けていれば透明（#4 spec §5.1 エラー）。
+    groundFallback: low === null ? FALLBACK_GROUND_COLOR : readToken('--color-scatter-bg-low', FALLBACK_GROUND_COLOR),
+    fill: pane === null ? FALLBACK_PANE_COLOR : toColorString(pane, PANE_FILL_ALPHA),
+    grid: pane === null ? FALLBACK_PANE_COLOR : toColorString(pane, PANE_GRID_ALPHA),
+    edge: pane === null ? FALLBACK_PANE_COLOR : toColorString(pane, PANE_EDGE_ALPHA),
+    label: parseHex(label) === null ? FALLBACK_LABEL_COLOR : label,
+  };
+}
+
 /** 点群の長さに合わせた作業領域を作る。描画関数の外（長さが変わった分岐）でだけ呼ぶ。 */
 function allocateBuffers(length: number): CloudBuffers {
+  const shadowLength = Math.ceil(length / SHADOW_STRIDE);
   return {
     projected: createProjectedCloud(length),
     keys: new Uint16Array(length),
     counts: new Uint32Array(BUCKET_COUNT + 1),
     order: new Uint32Array(length),
+    shadow: createProjectedCloud(shadowLength),
+    shadowKeys: new Uint8Array(shadowLength),
+    shadowCounts: new Uint32Array(SHADOW_BUCKET_COUNT + 1),
+    shadowOrder: new Uint32Array(shadowLength),
+  };
+}
+
+/** 投影の器を作る。effect の寿命で 1 度だけ呼ぶ。 */
+function createProjected(): Projected {
+  return { sx: 0, sy: 0, scale: 0, depth: 0 };
+}
+
+/** 面とラベルの器を作る。ラベルは縦 4 面の右の辺に 5 個ずつ（#4 spec §6.2）。画像は寸法が決まってから作る。 */
+function createScene(): Scene {
+  const labels: Label[] = [];
+  const perWall: Label[] = [];
+  for (let k = 0; k < WALL_IDS.length; k += 1) {
+    elevationLabels(WALL_IDS[k], 'right', perWall);
+    for (let i = 0; i < perWall.length; i += 1) {
+      labels.push(perWall[i]);
+    }
+  }
+  return {
+    weights: new Float64Array(WALL_IDS.length),
+    corners: [createProjected(), createProjected(), createProjected(), createProjected()],
+    labelScratch: [createProjected(), createProjected(), createProjected()],
+    frame: { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, shrink: 0 },
+    labels,
+    labelImages: null,
+    ground: null,
+    imageWidth: 0,
+    imageHeight: 0,
+    dpr: 0,
   };
 }
 
 /**
- * 1 フレームを描く。
+ * 地とラベルの画像を枠の寸法と devicePixelRatio に合わせて作り直す。
+ * 呼び出し側は寸法・dpr の変化を比較してからだけ呼ぶ（Requirement 5.6）。
+ */
+function rebuildImages(scene: Scene, colors: PanelColors, width: number, height: number, dpr: number): void {
+  scene.imageWidth = width;
+  scene.imageHeight = height;
+  scene.dpr = dpr;
+  scene.ground = colors.ground === null ? null : buildGroundImage(width, height, colors.ground.low, colors.ground.high);
+  scene.labelImages = buildLabelImages(scene.labels, dpr, colors.label);
+}
+
+/**
+ * 1 面を描く: 塗り → 格子 → 縁 → 影（#4 spec §6.7）。`globalAlpha` は呼び出し側が面の重みに設定してある。
+ *
+ * 格子線の端点は頂点 4 個の投影から線形補間する。透視では厳密に直線上に乗らないが、
+ * 誤差は 1 px の線幅に対し 1〜3 px で見分けがつかず、面ごとの投影を頂点の 4 回に抑えられる（#4 spec §6.3）。
+ */
+function drawPane(
+  ctx: CanvasRenderingContext2D,
+  pane: Pane,
+  view: { width: number; height: number },
+  yaw: number,
+  pitch: number,
+  points: readonly main.ScatterPoint[],
+  colors: PanelColors,
+  shadows: ShadowPalettes,
+  terrainPhase: number,
+  scene: Scene,
+  buffers: CloudBuffers,
+): void {
+  const c = scene.corners;
+  for (let i = 0; i < 4; i += 1) {
+    projectPoint(pane.corners[i], yaw, pitch, view, c[i]);
+  }
+  ctx.fillStyle = colors.fill;
+  ctx.beginPath();
+  ctx.moveTo(c[0].sx, c[0].sy);
+  ctx.lineTo(c[1].sx, c[1].sy);
+  ctx.lineTo(c[2].sx, c[2].sy);
+  ctx.lineTo(c[3].sx, c[3].sy);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.lineWidth = LINE_WIDTH;
+  ctx.strokeStyle = colors.grid;
+  ctx.beginPath();
+  // 頂点は origin → along → along + up → up の順（panes.ts）。c0→c1・c3→c2 が along、c0→c3・c1→c2 が up。
+  for (let g = 1; g < GRID_STOPS.length - 1; g += 1) {
+    const t = GRID_STOPS[g] / 2;
+    ctx.moveTo(c[0].sx + (c[3].sx - c[0].sx) * t, c[0].sy + (c[3].sy - c[0].sy) * t);
+    ctx.lineTo(c[1].sx + (c[2].sx - c[1].sx) * t, c[1].sy + (c[2].sy - c[1].sy) * t);
+    ctx.moveTo(c[0].sx + (c[1].sx - c[0].sx) * t, c[0].sy + (c[1].sy - c[0].sy) * t);
+    ctx.lineTo(c[3].sx + (c[2].sx - c[3].sx) * t, c[3].sy + (c[2].sy - c[3].sy) * t);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = colors.edge;
+  ctx.beginPath();
+  ctx.moveTo(c[0].sx, c[0].sy);
+  ctx.lineTo(c[1].sx, c[1].sy);
+  ctx.lineTo(c[2].sx, c[2].sy);
+  ctx.lineTo(c[3].sx, c[3].sy);
+  ctx.closePath();
+  ctx.stroke();
+
+  // 影。バケット順の配列は render が 1 フレームに 1 度作ったものを全面で使い回す（Requirement 4.8）。
+  const shadow = buffers.shadow;
+  projectPointsOnto(points, pane.fixedAxis, pane.fixedValue, SHADOW_STRIDE, yaw, pitch, view, shadow);
+  const counts = buffers.shadowCounts;
+  const order = buffers.shadowOrder;
+  const terrain = shadows.terrain[terrainPhase];
+  let start = 0;
+  for (let key = 0; key < SHADOW_BUCKET_COUNT; key += 1) {
+    const end = counts[key];
+    if (end === start) {
+      continue;
+    }
+    const structure = Math.floor(key / SHADOW_STEPS);
+    const table = structure === 0 ? terrain : structure === 1 ? shadows.sphere : shadows.torus;
+    ctx.fillStyle = table[key % SHADOW_STEPS];
+    for (let j = start; j < end; j += 1) {
+      const index = order[j];
+      ctx.fillRect(shadow.sx[index], shadow.sy[index], 1, 1);
+    }
+    start = end;
+  }
+}
+
+/**
+ * 1 フレームを描く: 地 → 床 → 重みが正の縦面（塗り・格子・縁・影）→ 点 → ラベル（#4 spec §6.7）。
  *
  * 描画対象は canvas のバッキングストアで、投影は CSS ピクセルで行うため、
  * devicePixelRatio ぶんの拡大は変換行列で吸収する。
  *
- * `axisFrom`・`axisTo`・`buffers` は呼び出し側が持ち回る作業領域で、内容はこの関数が上書きする。
- * この関数の中では新しいオブジェクト・配列・関数・文字列を作らない（spec.md §7 7.7、9.4）。
+ * `scene`・`buffers` は呼び出し側が持ち回る作業領域で、内容はこの関数が上書きする。
+ * この関数の中では新しいオブジェクト・配列・関数・文字列を作らない（spec.md §7 7.7、#4 spec Requirement 9.3）。
  */
 function render(
   ctx: CanvasRenderingContext2D,
@@ -198,41 +457,65 @@ function render(
   orbit: Orbit,
   colors: PanelColors,
   palettes: Palettes,
+  shadows: ShadowPalettes,
   terrainPhase: number,
-  axisFrom: Projected,
-  axisTo: Projected,
+  scene: Scene,
   buffers: CloudBuffers,
 ): void {
   const scaleX = canvas.width / view.width;
   const scaleY = canvas.height / view.height;
   ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
-  ctx.clearRect(0, 0, view.width, view.height);
-  ctx.fillStyle = colors.background;
-  ctx.fillRect(0, 0, view.width, view.height);
+  // 地は不透明な画像で枠全体を覆うので clearRect は要らない。画像を作れなかったときだけべた塗りで退避する（Requirement 5.5・5.7）。
+  if (scene.ground === null) {
+    ctx.clearRect(0, 0, view.width, view.height);
+    ctx.fillStyle = colors.groundFallback;
+    ctx.fillRect(0, 0, view.width, view.height);
+  } else {
+    ctx.drawImage(scene.ground, 0, 0, view.width, view.height);
+  }
 
   const yaw = orbit.yaw;
   const pitch = orbit.pitch;
-
-  // 軸線を点より先に描く。点ごとの深度比較を線と行うのは割に合わないため、
-  // 線を下に敷いて奥行きは不透明度で表す（spec.md §8）。点群が空でも描く（4.7）。
-  ctx.lineWidth = LINE_WIDTH;
-  for (let i = 0; i < AXIS_SEGMENTS.length; i += 1) {
-    const segment = AXIS_SEGMENTS[i];
-    projectPoint(segment.from, yaw, pitch, view, axisFrom);
-    projectPoint(segment.to, yaw, pitch, view, axisTo);
-    const nearness = ((axisFrom.depth + axisTo.depth) / 2 + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
-    ctx.globalAlpha = LINE_ALPHA_FAR + LINE_ALPHA_SPAN * nearness;
-    ctx.strokeStyle = segment.kind === 'axis' ? colors.axis : colors.edge;
-    ctx.beginPath();
-    ctx.moveTo(axisFrom.sx, axisFrom.sy);
-    ctx.lineTo(axisTo.sx, axisTo.sy);
-    ctx.stroke();
-  }
-  // 点の不透明度は帯ごとに色文字列へ焼き込んである（BAND_ALPHA）ため、点の描画では
-  // globalAlpha を触らない。軸線が残した値を 1 へ戻してから点を描く（spec.md §7 7.5）。
-  ctx.globalAlpha = 1;
-
   const points = cloud.points;
+
+  // 影のバケット順は面によらない（構造と色の値だけで決まる）ので、1 フレームに 1 度だけ並べる（Requirement 4.8）。
+  // 旧形式の payload では s・c が無いので 0 として読む（spec.md §7 4.3）。
+  const shadowKeys = buffers.shadowKeys;
+  const shadowCounts = buffers.shadowCounts;
+  const shadowOrder = buffers.shadowOrder;
+  const shadowLength = shadowOrder.length;
+  shadowCounts.fill(0);
+  for (let j = 0; j < shadowLength; j += 1) {
+    const point = points[j * SHADOW_STRIDE];
+    const structure = Math.min(STRUCTURE_COUNT - 1, Math.max(0, point.s ?? 0));
+    const step = Math.min(SHADOW_STEPS - 1, Math.floor((point.c ?? 0) * SHADOW_STEPS));
+    const key = structure * SHADOW_STEPS + step;
+    shadowKeys[j] = key;
+    shadowCounts[key + 1] += 1;
+  }
+  for (let key = 1; key <= SHADOW_BUCKET_COUNT; key += 1) {
+    shadowCounts[key] += shadowCounts[key - 1];
+  }
+  for (let j = 0; j < shadowLength; j += 1) {
+    const key = shadowKeys[j];
+    shadowOrder[shadowCounts[key]] = j;
+    shadowCounts[key] += 1;
+  }
+
+  // 面の重みは 1 フレームに 1 度だけ求め、面とラベルで同じ器を読む（Requirement 2.8）。
+  const weights = wallWeights(yaw, scene.weights);
+  // 床は重み 1（globalAlpha は前のフレームの出口で 1 に戻してある）。点群が空でも面は描く（Requirement 2.6）。
+  drawPane(ctx, PANES.floor, view, yaw, pitch, points, colors, shadows, terrainPhase, scene, buffers);
+  for (let k = 0; k < WALL_IDS.length; k += 1) {
+    const w = weights[k];
+    // 重み 0 の面は描かない。不透明度 0 と同じ結果なので飛びにならない（Requirement 2.1）。
+    if (w > 0) {
+      ctx.globalAlpha = w;
+      drawPane(ctx, PANES[WALL_IDS[k]], view, yaw, pitch, points, colors, shadows, terrainPhase, scene, buffers);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   const projected = buffers.projected;
   const keys = buffers.keys;
   const counts = buffers.counts;
@@ -243,7 +526,6 @@ function render(
   const length = projected.length;
 
   // 第 1 段: 各点のバケット番号を求め、バケットごとの点数を数える（spec.md §6.4）。
-  // 旧形式の payload では s・c が無いので 0 として読む（spec.md §7 4.3）。
   counts.fill(0);
   for (let i = 0; i < length; i += 1) {
     const point = points[i];
@@ -266,7 +548,7 @@ function render(
   }
 
   // 第 3 段: バケットの昇順に描く。fillStyle の設定はバケットごとに 1 回（spec.md §7 7.2、9.6）。
-  // 並べ替えの後、counts[key] はバケット key の終端（= 次のバケットの先頭）になっている。
+  // 点の不透明度は帯ごとに色文字列へ焼き込んである（BAND_ALPHA）ため、点の描画では globalAlpha を触らない。
   const terrain = palettes.terrain[terrainPhase];
   let start = 0;
   for (let key = 0; key < BUCKET_COUNT; key += 1) {
@@ -287,8 +569,38 @@ function render(
     }
     start = end;
   }
-  // 次のフレームの clearRect / fillRect が半透明にならないよう戻す（spec.md §7 7.5）。
-  ctx.globalAlpha = 1;
+
+  // ラベルは点の後に描き、文字を点で隠さない。面ごとに重みの 3 乗を不透明度にし、隣の面の列を面より速く薄れさせる（#4 spec §6.2）。
+  const images = scene.labelImages;
+  if (images === null) {
+    return;
+  }
+  const labels = scene.labels;
+  const frame = scene.frame;
+  const scratch = scene.labelScratch;
+  const perWall = labels.length / WALL_IDS.length;
+  for (let k = 0; k < WALL_IDS.length; k += 1) {
+    const w = weights[k];
+    if (w <= 0) {
+      continue;
+    }
+    ctx.globalAlpha = w * w * w;
+    for (let i = k * perWall; i < (k + 1) * perWall; i += 1) {
+      const label = labels[i];
+      labelFrame(label, yaw, pitch, view, scene.dpr, scratch, frame);
+      // 鏡像（a < 0）・真横に近く潰れた文字（shrink < 0.35）・8 px 未満の文字は描かない（#4 spec §6.2 可読性の下限）。
+      if (frame.a < 0 || frame.shrink < 0.35 || label.fontPx * scratch[0].scale < 8) {
+        continue;
+      }
+      const image = images[i];
+      // 基底の dpr 拡大に合成する。setTransform は基底を置換してしまうので使わない（Requirement 3.9）。
+      ctx.save();
+      ctx.transform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f);
+      ctx.drawImage(image, 0, -image.height);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
 }
 
 /**
@@ -387,17 +699,13 @@ export function Scatter3DPanel(): React.JSX.Element {
 
     // 色はマウント時に 1 度だけ読む。毎フレーム読むと描画のたびに
     // スタイル計算が走る（spec.md §8 色の解決）。
-    const colors: PanelColors = {
-      background: readToken('--color-surface-1', FALLBACK_BACKGROUND_COLOR),
-      axis: readToken('--color-text-dim', FALLBACK_LINE_COLOR),
-      edge: readToken('--color-border', FALLBACK_LINE_COLOR),
-    };
-    // 点のパレットもマウント時に 1 度だけ作る（spec.md §6.5）。
+    const colors = readColors();
+    // 点のパレットと影の色の表もマウント時に 1 度だけ作る（spec.md §6.5、#4 spec §6.4）。
     const palettes = buildPalettes();
+    const shadows = buildShadowPalettes();
 
-    // 軸線の両端の投影を受ける器。effect の寿命で 2 個だけ作り、毎フレーム同じ器を渡す（spec.md §7 5.6）。
-    const axisFrom: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
-    const axisTo: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
+    // 面の頂点・ラベルの微分の投影を受ける器と 20 個のラベル。effect の寿命で 1 度だけ作り、毎フレーム同じ器を渡す。
+    const scene = createScene();
     // 点群の作業領域。長さが変わった分岐（下の frame）でだけ作り直す（spec.md §7 7.6）。
     let buffers = allocateBuffers(0);
 
@@ -434,10 +742,15 @@ export function Scatter3DPanel(): React.JSX.Element {
       if (cloud.points.length !== buffers.order.length) {
         buffers = allocateBuffers(cloud.points.length);
       }
+      // 地とラベルの画像は、枠の寸法（デバイス px）か devicePixelRatio が変わったときだけ作り直す（Requirement 5.6）。
+      const dpr = window.devicePixelRatio || 1;
+      if (canvas.width !== scene.imageWidth || canvas.height !== scene.imageHeight || dpr !== scene.dpr) {
+        rebuildImages(scene, colors, canvas.width, canvas.height, dpr);
+      }
       const elapsedMs = nowMs - startMs;
       const terrainPhase = Math.floor(((elapsedMs % TERRAIN_CYCLE_MS) / TERRAIN_CYCLE_MS) * TERRAIN_PHASES);
 
-      render(ctx, canvas, view, cloud, orbit, colors, palettes, terrainPhase, axisFrom, axisTo, buffers);
+      render(ctx, canvas, view, cloud, orbit, colors, palettes, shadows, terrainPhase, scene, buffers);
     };
 
     // ポインタ操作。前回位置は数値 2 つで持ち、イベントごとにオブジェクトを作らない。

@@ -162,3 +162,23 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 
 - tasks.md 3.2 は「`cursor-grab`(auto)/ `cursor-grabbing`(drag)」をクラス名で持たせると読めるが、実装は `className` に `cursor-grab` を置き、drag 中は `canvas.style.cursor = 'grabbing'` で上書きする(3.2 本文の「`canvas.style.cursor` またはクラス切り替え」の前者)。Tailwind の未使用クラス `cursor-grabbing` が CSS に生成されない前提でも動くため、この形にした。
 - 3.2 のクリーンアップでは `endDrag` を呼ばない。tasks.md 3.2 の末尾の注記どおり、`Orbit` は effect と共に捨てられ状態は残らない。
+
+### 最終検証パネル(2026-09-06)
+
+| 観点 | 判定 | Critical | Major | Minor |
+| :-- | :-- | :-- | :-- | :-- |
+| 仕様適合・正しさ | GO | 0 | 0 | 3 |
+| 構造・コーディング規約 | GO | 0 | 0 | 3 |
+| 性能・リソース解放 | GO | 0 | 1 | 3 |
+
+- Major(性能): `projectPoint` が呼び出しごとに `Projected` を新規生成するため、軸線の端点 30 個分の割り当てが毎フレーム増えた(点 256 個分は main 時点からの既存挙動)。短命な小オブジェクトで p95 に現れる証拠は静的には無いため対応を見送り、次の unit(描画方法を大きく変える)で `projectPoint` に出力先の器を渡す形を検討する。
+- Minor は追跡性(テスト名の Requirement ID の食い違い)・コメント体裁・2 本目のポインタの選別など。この unit では対応しない。
+
+### 中継役がホストで確かめた項目(2026-09-06)
+
+- 配布ビルド(`wails build -devtools`)を起動し、ユーザーが画面を目視して受け入れた(Requirement 10.1〜10.8 に相当する現在の見た目・操作を承認)。
+- ビルドした `frontend/dist/index.html` に `cursor-grab` と `touch-none` が各 1 件、バンドルに `AXIS_SEGMENTS` と `setPointerCapture` が含まれること、`canvas` が 5 個であることを確認した。
+
+### 未検証のまま残す項目
+
+- Requirement 9.1(p95 の計測): 未実施。次の unit で点の数・カラーマップ・背面パネルなど描画方法を大きく変える予定のため、計測はその後に行う。手順は B 節のとおり。

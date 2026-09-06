@@ -122,8 +122,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 仕様参照: spec.md Requirement 8・9.2
     - 検証コマンド: `(cd frontend && npm ci) && wails build && go vet ./... && go test ./... && (cd frontend && npm test) && (cd frontend && npm run lint)` がこの順で終了コード 0 / (8.1・8.2)`git diff --quiet main -- scatterpoint.go scattersource.go frontend/src/lib/feed.ts frontend/src/lib/framestats.ts frontend/src/lib/orbit.ts` が終了コード 0(`main` との差分が無い)
 
-- [ ] 7. 計測と目視の手順(中継役が実行)
-  - [ ] 7.1 Implementation Notes に p95 の計測手順と Requirement 10 の目視手順を書き、未検証の基準を明示する
+- [x] 7. 計測と目視の手順(中継役が実行)
+  - [x] 7.1 Implementation Notes に p95 の計測手順と Requirement 10 の目視手順を書き、未検証の基準を明示する
     _Requirements: 9.1, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
     _Boundary: docs(本ファイル)_
     _Depends: 6.1_
@@ -133,10 +133,47 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 
 ## Implementation Notes
 
-- 6.1 完了(2026-09-07、HEAD `7f7faf0` の分割後): Global Constraints の順で `npm ci` → `wails build` → `go vet ./...` → `go test ./...`(`nullops`・`nullops/feed` ok)→ `npm test`(70 件 pass・fail 0)→ `npm run lint`(35 files・エラー 0)がいずれも終了コード 0。(8.1・8.2)`git diff --quiet main -- scatterpoint.go scattersource.go frontend/src/lib/feed.ts frontend/src/lib/framestats.ts frontend/src/lib/orbit.ts` 終了コード 0。凍結済み文書(`001-dashboard-mvp/**`・`002-visual-refinement/001-*`〜`003-*`・本 unit の `spec.md`)も `main` と差分なし。変更禁止ファイルへの変更はなく、該当タスクへ戻す失敗はなかった
 - 1.1 完了(2026-09-07): `panes.ts`・`panes.test.ts` を作成。`Vec3` の定義元を `panes.ts` へ移し、`project.ts` は `panes.ts` から import、`axes.ts` は 5.1 で削除するまで `Vec3` を再 export するだけに変えた(既存の import を壊さないため)。検証: `npm test` 46 件 pass(`panes.test.ts` 10 件を含む)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `grep -c "Math\.\(sin\|cos\)(" panes.ts` = 2。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)
 - 2.1 完了(2026-09-07): `projectPointsOnto` と `FILL` の export を `project.ts` に、`buildShadowRamp(stops, steps, alpha)` を `palette.ts` に追加。`buildRamp` は `buildShadowRamp` で帯ごとの行を作る形に改め、色文字列のテンプレートを `palette.ts` の 1 関数に閉じた。引数の順は spec.md §5.4 の `(points, axis, value, stride, yaw, pitch, view, out)` に従った(本ファイルの Interfaces 欄は `view` と `yaw, pitch` の順が逆で、spec.md を正とする)。`project.test.ts` の `Vec3` の import 元を `axes.ts` から `panes.ts` へ移した(5.1 の削除に備える)。検証: `npm test` 57 件 pass(2.1 で 11 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / (4.4)テストで三角関数 4 回を確認 / (8.5)`grep -rn "rgba(" frontend/src --include='*.ts' --include='*.tsx' | grep -v "\.test\.ts"` が `palette.ts` の 1 箇所
 - 3.1 完了(2026-09-07): `labels.ts`・`labels.test.ts` を作成。`elevationLabels` は `out` を空にしてから 5 個を書き(マウント時にだけ呼ぶため Label オブジェクトの生成を許す)、`labelFrame` は微分用のずらした点をモジュール定数の `Vec3` 1 個で使い回して新しいオブジェクトを作らない。3.4 のテストは `projectPoint` を呼ばず spec §5.3 の式を自前で計算して比較した。3.5 は既定ピッチの反転(4.1)前後の両方(±0.42)で 1° 刻み 361 点を走査し、重みが正の面の `a ≥ 0` を確認。検証: `npm test` 70 件 pass(3.1 で 13 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)
 - 4.1 完了(2026-09-07): `noise.ts`・`noise.test.ts` を作成(格子 8 px の値ノイズを smoothstep で補間。整数ハッシュで決定的に生成し、格子を循環させて端の継ぎ目を消す)。`globals.css` の `@theme` に 4 トークンを追加。`SCATTER_PITCH` を `0.42` に反転し、符号と向きの対応をコメントに明記。`project.test.ts` に 7.1・7.2 のテストを追加。`orbit.test.ts` は `SCATTER_PITCH` を import して比較するため変更なしで通る(6.2)。検証: `npm test` 75 件 pass(4.1 で 5 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / (5.2)`grep -c "Math.random" noise.ts` = 0 / (7.1)`SCATTER_PITCH = 0.42` 1 件 / (7.4)「見下ろす」1 件 / (7.3)`orbit.ts` に差分なし / (8.5)トークン 4 件。`wails build`・`go vet`・`go test` は本タスクでは未実行(6.1 で全体を回す)
 - 5.1 分割(2026-09-07): `Scatter3DPanel.tsx` 824 行から「面 1 枚の描画手順」の責務を `scatterPanes.ts`(297 行)へ移し、`Scatter3DPanel.tsx` を 550 行にした。移したのは `drawPane`・影の定数と色の表(`buildShadowPalettes`)・`readColors`・`readStops`・`createScene`・型 `PanelColors`/`ShadowPalettes`/`Scene`・退避色とトークン名。`getComputedStyle` を持つ `readToken` はコンポーネントに残し、`TokenReader` として引数で渡す(移動先を DOM 非依存に保つ)。`drawPane` の作業領域の引数は読む 3 項目だけの `ShadowBuffers` に狭めた(`CloudBuffers` は構造的に代入できる)。振る舞いの変更なし。検証: `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `npm test` 70 件 pass。静的検査を 2 ファイルで数え直した結果(コンポーネント / scatterPanes.ts): `wallWeights(` 1 / 0、`fillText(` 0 / 0、`drawImage(` 2 / 0、`setTransform(` 1 / 0、`globalAlpha = ` 4 / 0(右辺は面 `w`・`1`、ラベル `w * w * w`・`1`)、`.sort(`・`ctx.arc(` 0 / 0、`stroke()` 0 / 2(`drawPane` の格子と縁)、`elevationLabels(` 0 / 1(`createScene`)、`transform(` はコンポーネントの 1 箇所で `save`・`restore` に挟まれる、`0.35`・`< 8` はラベルの `drawImage` 直前、枠全体の `fillRect` は退避経路のみ、16 進の直値 0 件、`rgba(` は `palette.ts` の 1 箇所、`AXIS_SEGMENTS` 0 件
 - 5.1 完了(2026-09-07): `scatterImages.ts` を新規作成(地の 48×48 `ImageData` → 枠の寸法へ平滑拡大した canvas、ラベル 20 個を `fontPx × dpr` の高さで焼いた canvas。2D コンテキストを取れなければ `console.error` して null)。`Scatter3DPanel.tsx` は地 → 床 → 重みが正の縦面(塗り → 格子 → 縁 → 影)→ 点 → ラベルの順に置き換え、面の頂点 4 個・ラベルの微分 3 個・`LabelFrame`・重みの `Float64Array(4)` を `Scene` として effect の寿命で 1 度だけ作る。影のバケット順(24 バケットの counting sort)は `render` の先頭で 1 度だけ作り `drawPane` が全面で使い回す。地とラベルの画像は `canvas.width/height`(デバイス px)と `devicePixelRatio` の比較で囲った分岐でだけ作り直す。`palette.ts` の `toColorString` を export し、パネルの塗り・格子・縁の色文字列(不透明度 0.06 / 0.16 / 0.45)をマウント時に作る(`rgba(` のテンプレートは `palette.ts` の 1 箇所のまま)。`axes.ts`・`axes.test.ts` を削除。検証: `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `npm test` 70 件 pass(`axes.test.ts` の 5 件が減る) / (6.1)`AXIS_SEGMENTS`・`kind: 'axis'` 0 件 / (2.8)`wallWeights(` 1 / (3.8)`fillText(` 0・`drawImage(` 2 / (3.9)`setTransform(` 1、`transform(` は `save`・`restore` に挟まれる / (3.15・9.5)`globalAlpha = ` 4 箇所(面: `w`・`1`、ラベル: `w * w * w`・`1`) / (3.7)`0.35`・`< 8` はラベルの `drawImage` 直前の比較 / (4.8・9.4)`.sort(`・`arc(` 0 件 / (8.5)16 進の直値 0 件・`rgba(` は `palette.ts` の 1 箇所 / (3.10)`elevationLabels(` は `createScene`(マウント時)だけ / (5.5)枠全体の `fillRect` は `scene.ground === null` の退避経路だけ / (2.3)`stroke()` は `drawPane` の 2 箇所。`Scatter3DPanel.tsx` は 824 行(分離後も check.py の行数の目安を超える見込み。分割案は報告で示す)。`wails build`・`go vet ./...`・`go test ./...` も終了コード 0(5.1 のコミット後に実行)
+- 6.1 完了(2026-09-07、HEAD `7f7faf0` の分割後): Global Constraints の順で `npm ci` → `wails build` → `go vet ./...` → `go test ./...`(`nullops`・`nullops/feed` ok)→ `npm test`(70 件 pass・fail 0)→ `npm run lint`(35 files・エラー 0)がいずれも終了コード 0。(8.1・8.2)`git diff --quiet main -- scatterpoint.go scattersource.go frontend/src/lib/feed.ts frontend/src/lib/framestats.ts frontend/src/lib/orbit.ts` 終了コード 0。凍結済み文書(`001-dashboard-mvp/**`・`002-visual-refinement/001-*`〜`003-*`・本 unit の `spec.md`)も `main` と差分なし。変更禁止ファイルへの変更はなく、該当タスクへ戻す失敗はなかった
+- 7.1 完了(2026-09-07): `wails build -devtools` 終了コード 0(HEAD `dd71714`)。計測と目視の手順は下の節に書く。Requirement 9.1・9.6・10.1〜10.7 は本実装者が実行せず「未検証(中継役が実行)」とする(Global Constraints の人間の回答)
+
+### 中継役がホストで確かめる項目(手順。Requirement 9.1・9.6・10)
+
+**p95 の計測(Requirement 9.1・9.6)**: `wails build -devtools` のビルドを 1440×900 で起動し、devtools のコンソールで `window.nullops.enableFrameStats()` を呼ぶ(手順は凍結済み `docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md` B 節)。5 パネル(`commit`・`depgraph`・`gauge`・`scatter`・`timeseries`)の p95・mean・max が 60 フレームごとに出力されるのを 10 回以上読み、最後の 6 行(30 秒ぶん)を集計する。合格条件: 5 パネルすべてで、最後の 6 行のいずれも p95 が 20 ms 未満(9.1)。max は記録のみ(50 ms 超は削る順の発動条件。#3 tasks.md Implementation Notes と同じ)。取得した値は下の「完了時」の表へ転記する(9.6)。
+
+**着手時(unit #3 完了時の値を流用。spec.md §3 前提 11。再計測しない)**:
+
+| パネル | p95 | mean | max |
+| :-- | :-- | :-- | :-- |
+| commit | 17.0〜18.0 ms | 16.7 ms | 19〜24 ms |
+| depgraph | 17.0〜18.0 ms | 16.7 ms | 19〜24 ms |
+| gauge | 17.0〜18.0 ms | 16.7 ms | 19〜25 ms |
+| scatter | 17.0〜18.0 ms | 16.7 ms | 19〜25 ms |
+| timeseries | 17.0〜18.0 ms | 16.7 ms | 19〜25 ms |
+
+**完了時(未取得。中継役が渡す)**:
+
+| パネル | p95 | mean | max |
+| :-- | :-- | :-- | :-- |
+| commit | (未取得) | (未取得) | (未取得) |
+| depgraph | (未取得) | (未取得) | (未取得) |
+| gauge | (未取得) | (未取得) | (未取得) |
+| scatter | (未取得) | (未取得) | (未取得) |
+| timeseries | (未取得) | (未取得) | (未取得) |
+
+**目視(Requirement 10.1〜10.7)**: 同じビルドを起動し、3D 散布図のパネルで次を確かめる。判定は各項目の合格条件による。
+
+1. 10.1(放置): 起動後に触らず 30 秒観る。床を上から見下ろす向きで、奥を向く縦面(奥向きの度合いで濃さが変わる)と床に薄い面・3 × 3 の格子・縁が描かれ、点群と同じ回転で動く(画面に固定されない)こと。
+2. 10.2(1 周のドラッグ): ドラッグで視点を水平に 1 周回す。面とラベルが突然消える・現れることがなく、奥向きの度合いに応じて連続に濃く・薄くなること(重みが 0 の面は描かないが、重みは連続に 0 へ落ちるため飛びにならない)。
+3. 10.3(格子と点): 格子線(1 px)が 1〜2 px の点を隠して構造(地形・球・トーラス)が読めなくなっていないこと。
+4. 10.4(目盛りと軸名): 縦面の右の辺の 4 値と `Elevation` が面に沿って歪み、視点を回すと一緒に回ること。どの視点でも鏡像にならず(鏡像は描かない)、読めないほど潰れた文字が残っていないこと(真横に近い面・8 px 未満の文字は描かない)。
+5. 10.5(地): 背景が一様な黒ではなく、むらのある深い青の地であること。粒(ノイズの格子)が見えないこと。
+6. 10.6(影): 点群の投影が奥を向く縦面と床に、点の色を保ったまま暗く写り、視点を回すと面と一緒に回ること。
+7. 10.7(既存の維持): unit #3 の点群・色・構造(#3 spec Requirement 10.1〜10.6)と unit #2 の操作(ドラッグ・復帰・カーソル。#2 spec Requirement 10)が引き続き満たされること。
+
+**未検証の受け入れ基準(中継役が実行)**: 9.1(p95 < 20 ms)・9.6(完了時の p95・mean・max の記録)・10.1〜10.7(目視)。これらは本実装者が実行していない。中継役が上の手順で確かめ、結果を本節へ転記する。

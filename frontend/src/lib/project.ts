@@ -3,6 +3,9 @@ import type { Vec3 } from './axes.ts';
 /** 投影の結果。`depth` は大きいほど手前。 */
 export type Projected = { sx: number; sy: number; scale: number; depth: number };
 
+/** 点群 1 フレームぶんの投影結果。長さ capacity の typed array を持つ器。 */
+export type ProjectedCloud = { sx: Float32Array; sy: Float32Array; depth: Float32Array; length: number };
+
 /**
  * ピッチ(X 軸まわりの固定の回転角)。点群を斜め上から見た画にする。
  *
@@ -24,13 +27,18 @@ const FILL = 0.78;
 /**
  * モデル座標の 1 点を、回転と透視投影を経てキャンバス座標へ落とす。
  *
- * 純関数であり、同じ引数につねに同じ値を返す(spec.md §5.6)。
- * 第 1 引数を `Vec3` にしているのは、点群の `ScatterPoint` と軸線の端点を同じ関数で投影するため
- * (`w` は読まないので `ScatterPoint` を渡す既存の呼び出しは互換)。
- * 描画コンポーネントから切り出しているのは、擬似データの生成と描画を分ける
- * という CLAUDE.md の規約に倣い、座標変換だけを単独で確かめられるようにするため。
+ * 純関数であり、同じ引数につねに同じ値を `out` に書く(spec.md §5.3)。
+ * 戻り値を新しく作らず `out` を上書きして返すのは、毎フレーム点数ぶんのオブジェクトを
+ * 生成して GC を誘発しないため(CLAUDE.md「再描画のたびに新しいオブジェクトを作らない」)。
+ * 第 1 引数を `Vec3` にしているのは、点群の `ScatterPoint` と軸線の端点を同じ関数で投影するため。
  */
-export function projectPoint(p: Vec3, yaw: number, pitch: number, view: { width: number; height: number }): Projected {
+export function projectPoint(
+  p: Vec3,
+  yaw: number,
+  pitch: number,
+  view: { width: number; height: number },
+  out: Projected,
+): Projected {
   // ヨー(Y 軸まわり)。X と Z が回り、Y は変わらない。
   const cosYaw = Math.cos(yaw);
   const sinYaw = Math.sin(yaw);
@@ -48,11 +56,64 @@ export function projectPoint(p: Vec3, yaw: number, pitch: number, view: { width:
   // 短辺を基準にするのは、枠が横長でも縦長でも点群を内側へ収めるため。
   const radius = (Math.min(view.width, view.height) / 2) * FILL;
 
+  // キャンバスの Y 軸は下向きなので、モデルの Y を反転して上向きに見せる。
+  out.sx = view.width / 2 + x1 * scale * radius;
+  out.sy = view.height / 2 - y2 * scale * radius;
+  out.scale = scale;
+  out.depth = z2;
+  return out;
+}
+
+/** 点群の投影結果を受ける器を作る。描画の外(effect)で 1 度だけ呼ぶ。 */
+export function createProjectedCloud(capacity: number): ProjectedCloud {
   return {
-    // キャンバスの Y 軸は下向きなので、モデルの Y を反転して上向きに見せる。
-    sx: view.width / 2 + x1 * scale * radius,
-    sy: view.height / 2 - y2 * scale * radius,
-    scale,
-    depth: z2,
+    sx: new Float32Array(capacity),
+    sy: new Float32Array(capacity),
+    depth: new Float32Array(capacity),
+    length: 0,
   };
+}
+
+/**
+ * 点群を一括で投影し、`out` の typed array へ書く。
+ *
+ * `projectPoint` と同じ変換だが、三角関数は先頭で 4 回だけ評価する(spec.md §5.3)。
+ * 点ごとに `projectPoint` を呼ぶと三角関数が点数 × 4 回になるため、点群ではこちらを使う。
+ * `scale` は点の大きさを帯で決めるため書かない(§6.4)。
+ */
+export function projectPoints(
+  points: readonly Vec3[],
+  yaw: number,
+  pitch: number,
+  view: { width: number; height: number },
+  out: ProjectedCloud,
+): void {
+  const cosYaw = Math.cos(yaw);
+  const sinYaw = Math.sin(yaw);
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
+  const halfWidth = view.width / 2;
+  const halfHeight = view.height / 2;
+  const radius = Math.min(halfWidth, halfHeight) * FILL;
+
+  const capacity = out.sx.length;
+  let length = points.length;
+  if (length > capacity) {
+    // 容量不足はプログラマの誤りだが、画面を止めないよう書ける範囲だけ書く(spec.md §5.3)。
+    console.error('projectPoints: 器の容量が点数に足りない', capacity, length);
+    length = capacity;
+  }
+
+  for (let i = 0; i < length; i += 1) {
+    const p = points[i];
+    const x1 = p.x * cosYaw + p.z * sinYaw;
+    const z1 = -p.x * sinYaw + p.z * cosYaw;
+    const y2 = p.y * cosPitch - z1 * sinPitch;
+    const z2 = p.y * sinPitch + z1 * cosPitch;
+    const scale = FOCAL / (FOCAL - z2);
+    out.sx[i] = halfWidth + x1 * scale * radius;
+    out.sy[i] = halfHeight - y2 * scale * radius;
+    out.depth[i] = z2;
+  }
+  out.length = length;
 }

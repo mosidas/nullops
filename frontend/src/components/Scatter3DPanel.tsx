@@ -5,7 +5,7 @@ import type { main } from '../../wailsjs/go/models';
 import { AXIS_SEGMENTS } from '../lib/axes';
 import { loadSnapshot, subscribeScatter } from '../lib/feed';
 import { recordFrame } from '../lib/framestats';
-import { advanceOrbit, createOrbit, type Orbit } from '../lib/orbit';
+import { advanceOrbit, beginDrag, createOrbit, dragBy, endDrag, type Orbit } from '../lib/orbit';
 import { type Projected, projectPoint } from '../lib/project';
 
 /** 計測器へ渡すパネル名（spec.md §9.1）。 */
@@ -320,15 +320,72 @@ export function Scatter3DPanel(): React.JSX.Element {
       render(ctx, canvas, view, cloudRef.current, orbit, colors, buffer);
     };
 
+    // ポインタ操作。前回位置は数値 2 つで持ち、イベントごとにオブジェクトを作らない。
+    // Pointer Events を使うのは、setPointerCapture で枠の外への追従が 1 つの API で済むため（spec.md §8）。
+    let lastX = 0;
+    let lastY = 0;
+    const onPointerDown = (event: PointerEvent): void => {
+      // 主ボタン以外や副ポインタ（マルチタッチの 2 本目）は視点を変えない（spec.md §7 1.4）。
+      if (event.button !== 0 || !event.isPrimary) {
+        return;
+      }
+      beginDrag(orbit);
+      lastX = event.clientX;
+      lastY = event.clientY;
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch (reason: unknown) {
+        // キャプチャできないポインタで drag に居座ると、pointerup を取り逃して
+        // 自動回転が止まったままになる。例外を伝播させず auto へ戻す（spec.md §7 6.5）。
+        console.error('ポインタのキャプチャに失敗した。ドラッグを中止して自動回転へ戻す:', reason);
+        endDrag(orbit);
+        return;
+      }
+      // カーソルは React の再描画ではなく style で切り替える。毎フレーム触らない（spec.md §7 7.2）。
+      canvas.style.cursor = 'grabbing';
+    };
+    const onPointerMove = (event: PointerEvent): void => {
+      // auto の間の移動は無視する（spec.md §7 1.5）。dragBy 自体も auto では何もしないが、
+      // 前回位置の更新を drag 中に限ることで、ドラッグ開始時の差分が飛ばないようにする。
+      if (orbit.mode !== 'drag') {
+        return;
+      }
+      dragBy(orbit, event.clientX - lastX, event.clientY - lastY);
+      lastX = event.clientX;
+      lastY = event.clientY;
+    };
+    // pointerup・pointercancel・lostpointercapture・blur は同じ 1 つの関数で受ける。
+    // endDrag は冪等なので、続けて届いても復帰をやり直さない（spec.md §7 6.2〜6.4）。
+    const stopDrag = (): void => {
+      endDrag(orbit);
+      canvas.style.cursor = '';
+    };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', stopDrag);
+    canvas.addEventListener('pointercancel', stopDrag);
+    canvas.addEventListener('lostpointercapture', stopDrag);
+    // アプリの切り替えで pointerup が届かない場合に備える（spec.md §3 前提 6）。
+    window.addEventListener('blur', stopDrag);
+
     handle = window.requestAnimationFrame(frame);
     // アンマウントでループを止める（spec.md §7 7.4）。止めないと外れた
     // キャンバスへ描き続け、パネルの数だけ無駄なフレームが積み上がる。
+    // リスナーも全部解除する（spec.md §7 6.6）。
     return () => {
       window.cancelAnimationFrame(handle);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', stopDrag);
+      canvas.removeEventListener('pointercancel', stopDrag);
+      canvas.removeEventListener('lostpointercapture', stopDrag);
+      window.removeEventListener('blur', stopDrag);
     };
   }, []);
 
   // 枠いっぱいに広げる。block にするのは、inline 要素の行下の余白で
   // 枠がわずかに縦へ溢れ、ページ側にスクロールバーが出るのを防ぐため。
-  return <canvas ref={canvasRef} className="block h-full w-full" />;
+  // touch-none はドラッグがページのスクロールやテキスト選択を起こさないため、
+  // cursor-grab は auto の間のカーソル（drag 中は style.cursor が上書きする。spec.md §7 7.1〜7.3）。
+  return <canvas ref={canvasRef} className="block h-full w-full touch-none cursor-grab" />;
 }

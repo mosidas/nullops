@@ -180,3 +180,37 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 7. 10.7(既存の維持): unit #3 の点群・色・構造(#3 spec Requirement 10.1〜10.6)と unit #2 の操作(ドラッグ・復帰・カーソル。#2 spec Requirement 10)が引き続き満たされること。
 
 **未検証の受け入れ基準**: なし。9.1(p95 < 20 ms)・9.6(完了時の p95・mean・max の記録)・10.1〜10.7(目視)は本実装者が実行せず、中継役が上の手順でホストで確かめて結果を本節へ転記した(2026-09-07)。
+
+### 最終検証の照合(2026-09-07、HEAD `1a73109`)
+
+観点: requirements-conformance・security・test(隔離した複製で変異注入)・performance の 4 体(dev-reviewer、生成と別文脈)。runtime-smoke・visual-conformance の実行時の観察は、Global Constraints の人間の回答に従い中継役がホストで実行した(上の 7.1 の記録)。判定: 4 観点すべて APPROVED、`[Critical]` 0 件、`UNVERIFIED` なし → **GO**。検証コマンドの出力は本ターンで 1 度だけ実行して各観点へ渡した(`go vet`・`go test`・`npm test` 70 件・`npm run lint` がいずれも成功。`wails build -devtools` は中継役が HEAD `9206669` で実行し、以降コードは未変更)。
+
+| 要件 ID | 照合した対象 | 立証の手段 |
+| :-- | :-- | :-- |
+| 1.1〜1.7 | `panes.ts`・`panes.test.ts` | テスト(1.2・1.4・1.7 は変異注入で検出) |
+| 2.1〜2.8 | `Scatter3DPanel.tsx` の面ループ・`scatterPanes.ts` の `drawPane` | 静的検査(`stroke()` 2・`wallWeights(` 1・`globalAlpha` の右辺)+ 目視 10.1(中継役) |
+| 3.1〜3.6・3.11〜3.14 | `labels.ts`・`labels.test.ts` | テスト(3.2・3.5・3.12・3.13 は変異注入で検出) |
+| 3.7〜3.10・3.15 | `Scatter3DPanel.tsx` のラベルの描画分岐 | 静的検査(`fillText` 0・`drawImage` 2・`setTransform` 1・`globalAlpha = ` 4)+ 目視 10.4(中継役) |
+| 4.1〜4.4 | `project.ts`・`project.test.ts` | テスト(4.1 は変異注入で検出) |
+| 4.5・4.7・4.8 | `scatterPanes.ts` の影・`render` 先頭の counting sort | 静的検査(`.sort(` 0・`fillStyle` の代入位置・描画順) |
+| 4.6 | `palette.ts`・`palette.test.ts` | テスト(変異注入で検出) |
+| 5.1〜5.4 | `noise.ts`・`noise.test.ts` | テスト(5.2・5.3 は変異注入で検出) |
+| 5.5〜5.7 | `scatterImages.ts`・`Scatter3DPanel.tsx` の画像の作り直しと退避 | 静的検査 + 目視 10.5(中継役) |
+| 6.1〜6.4 | `axes.ts` の不在・`panes.test.ts`・`orbit.ts` の不変 | grep 0 件・削除テストの内容確認・スイートのグリーン |
+| 7.1〜7.4 | `project.ts`・`project.test.ts`・`orbit.ts` の差分なし | テスト(7.1・7.2 は変異注入で検出)+ 静的検査 |
+| 8.1〜8.5 | 変更禁止ファイル・凍結文書の `main` との差分なし、`globals.css` のトークン 4 件 | `git diff --quiet`・grep(16 進 0 件・`rgba(` 1 箇所) |
+| 9.1・9.6 | Implementation Notes の「完了時」の表 | 中継役の計測(5 パネルとも p95 < 20 ms) |
+| 9.2 | 検証コマンドの出力 | 証跡の読解 |
+| 9.3〜9.5 | `render`・`drawPane`・`labelFrame`・`projectPointsOnto` | 静的検査(ホットパスの生成構文 0 件、回数の数え上げ: `fillStyle` ≤ 651・`drawImage` ≤ 11・`globalAlpha` ≤ 8) |
+| 10.1〜10.7 | 中継役の目視 | ユーザーの承認(2026-09-07) |
+| security(ID なし) | 外部通信・`Math.random`・依存追加・`wailsjs`・Go 側の変更 | いずれも 0 件 |
+
+変異注入(test 観点、10 件): `wallWeights` の符号反転・`projectPointsOnto` の stride 無視・`shrink` の scale 除去・ノイズの seed 除去・`buildShadowRamp` の端点ずらし・`SCATTER_PITCH` の符号反転・`CELL_PX` 8→2・`formatTick` の負の 0・`labelFrame` の dpr 除去・`GRID_STOPS` の変更。すべて対応するテストで検出(生存 0)。
+
+対応を見送った `[Nit]`(次 unit 以降の候補): (a) `scatterPanes.ts` は DOM 非依存なので、呼び出しを記録するスタブの `ctx` で `stroke` 2 回・影の `fillStyle` ≤ 24 回・描画順を振る舞いとして検証できる(現在は grep で代替)。(b) Requirement 3.7 の下限の述語(`shrink < 0.35`・`fontPx × scale < 8`)を `labels.ts` へ切り出せばテストできる。(c) ラベル画像の高さ `Math.ceil(fontPx × dpr)` は非整数 dpr で 3.13 から最大 3 % ずれる(見た目の微差)。(d) 地の退避経路の `fillRect` 1 回は 9.5 の字義上の上限を 1 回超えるが、トークンが実在するため通常経路では到達しない。(e) `labelFrame` はラベルごとに `projectPoint` を 3 回呼び三角関数が最大 60 回/フレーム走る(要件の対象外。計測上の必要なし)。
+
+### 凍結文書との乖離(最終検証パネルの `DRIFT`。中間生成物は書き換えない)
+
+1. tasks.md 2.1 の `_Interfaces:_` の引数順(`view, yaw, pitch`)と spec.md §5.4・実装(`yaw, pitch, view`)の食い違い。**spec.md が正**(公開契約)。Implementation Notes 2.1 に申告済みで、追加対応なし。
+2. spec.md §7 Requirement 3 の注は 3.7 の下限を「テスト」で確かめると書くが、判断は DOM 依存の `Scatter3DPanel.tsx` にあり `node --test` では到達できず、tasks.md 5.1 は静的検査を割り当てた。**tasks.md の手段が正**。置き場: 次 unit の spec で「描画側の下限は静的検査(または述語の切り出し後のテスト)で確かめる」と手段を実態に合わせる。
+3. spec.md Requirement 6.2「`project.test.ts` が変更なしで成功する」は、Requirement 6.1(`axes.ts` の廃止)と両立せず、`project.test.ts` は import 元の付け替えとテストの追加で変更された。**実装が正**(既存アサーションの削除・弱体化は 0 件で、意図「既存の振る舞いの維持」は満たす)。置き場: 次 unit の spec の同種の基準を「既存のアサーションを変えずに成功する」と書く。

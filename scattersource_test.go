@@ -115,9 +115,13 @@ func TestScatterSourceConcurrentAccess(t *testing.T) {
 
 // 受け入れ基準 2.7: 1000 回連続で呼んでも全点が座標・S・C の範囲に収まる。
 func TestScatterSourceKeepsPointsInUnitCube(t *testing.T) {
-	s := newTestScatterSource(t, 600)
+	// 点数は既定の scatterPointCount のまま回す(spec 2.7「すべての点」)。
+	// 繰り返しは位相の段数(120)ぶんにする。各点のパラメータは生成時に固定され、
+	// 位相は 120 回で 1 周して同じ幾何に戻るため、120 回で全位相を尽くせば
+	// 1000 回連続でも範囲内であることと同じ意味になり、-race の所要も抑えられる。
+	s := newTestScatterSource(t, scatterPointCount)
 
-	for frame := range 1000 {
+	for frame := range scatterPhaseSteps {
 		cloud := s.Next().(ScatterCloud)
 		for i, p := range cloud.Points {
 			for axis, v := range map[string]float64{"X": p.X, "Y": p.Y, "Z": p.Z} {

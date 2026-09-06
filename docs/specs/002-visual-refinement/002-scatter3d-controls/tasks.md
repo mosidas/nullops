@@ -65,7 +65,7 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 
 ## タスク一覧
 
-- [ ] 1. 視点の状態機械と `npm test` の成立
+- [x] 1. 視点の状態機械と `npm test` の成立
   - [x] 1.1 `frontend/package.json` に `"test": "node --test \"src/lib/**/*.test.ts\""` を足し、`frontend/tsconfig.json` に `allowImportingTsExtensions: true` を足す。`frontend/src/lib/orbit.ts` を spec.md §5.2 の定義どおりに新設し(`SCATTER_PITCH` は `./project.ts` から import。`YAW_RATE_RAD_PER_SEC`・`MAX_FRAME_MS` は既存値を `Scatter3DPanel.tsx` から移す)、`frontend/src/lib/orbit.test.ts` を TDD で先に書く。テストの観点: 初期値(auto・yaw 0・pitch `SCATTER_PITCH`・復帰完了)/ auto でのヨーの増分が `0.24 × 秒` / `elapsedMs` の切り詰め(負 → 0・100 超 → 100・NaN → 0)/ drag 中は `advanceOrbit` がヨー・ピッチを変えない / `dragBy` の増分 `dx × 0.01`・`dy × 0.01` と `±1.45` の切り詰め(超過しても反転しない)/ `dx`・`dy` の NaN・Infinity を 0 として扱う / auto 中の `dragBy` は無視 / `endDrag` でヨーを保ち、次の `advanceOrbit` から待ち時間なしにヨーが進む / 復帰: 累計 1500 ms 未満で `endDrag` 時点の値と `SCATTER_PITCH` の間(両端含む)にあり単調に近づく、1500 ms 到達でちょうど `SCATTER_PITCH`、ease-out(3 次)の 1 点を数値で照合 / 復帰途中の `beginDrag` はその時点のピッチで止まる / auto 中の `endDrag` は何もしない(冪等)/ 全関数が引数の `orbit` と同一の参照を保つ(戻り値なし・その場で更新)。`orbit.ts` の関数はオブジェクト・配列・関数を作らない
     _Requirements: 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 8.1, 9.2, 9.4_
     _Boundary: Orbit_

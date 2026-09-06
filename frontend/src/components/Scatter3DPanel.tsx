@@ -91,6 +91,10 @@ function readToken(name: string, fallback: string): string {
 /** 1 点ぶんの描画材料。フレームごとに作り直さないよう、器を使い回す。 */
 type Plotted = { point: main.ScatterPoint; projected: Projected };
 
+// 軸線の両端の投影を受ける器。2.1 の器渡しへの繋ぎとしてモジュールに置く(3.1 で effect の寿命へ移す)。
+const axisFrom: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
+const axisTo: Projected = { sx: 0, sy: 0, scale: 0, depth: 0 };
+
 /** 奥行きの昇順（奥→手前）に並べる比較関数。毎フレーム作らないため外に置く。 */
 function byDepthAscending(a: Plotted, b: Plotted): number {
   return a.projected.depth - b.projected.depth;
@@ -129,8 +133,8 @@ function render(
   ctx.lineWidth = LINE_WIDTH;
   for (let i = 0; i < AXIS_SEGMENTS.length; i += 1) {
     const segment = AXIS_SEGMENTS[i];
-    const from = projectPoint(segment.from, yaw, pitch, view);
-    const to = projectPoint(segment.to, yaw, pitch, view);
+    const from = projectPoint(segment.from, yaw, pitch, view, axisFrom);
+    const to = projectPoint(segment.to, yaw, pitch, view, axisTo);
     const nearness = ((from.depth + to.depth) / 2 + DEPTH_LIMIT) / (2 * DEPTH_LIMIT);
     ctx.globalAlpha = LINE_ALPHA_FAR + LINE_ALPHA_SPAN * nearness;
     ctx.strokeStyle = segment.kind === 'axis' ? colors.axis : colors.edge;
@@ -149,13 +153,12 @@ function render(
     }
     for (let i = 0; i < points.length; i += 1) {
       const point = points[i];
-      const projected = projectPoint(point, yaw, pitch, view);
       const entry = buffer[i];
       if (entry === undefined) {
-        buffer[i] = { point, projected };
+        buffer[i] = { point, projected: projectPoint(point, yaw, pitch, view, { sx: 0, sy: 0, scale: 0, depth: 0 }) };
       } else {
         entry.point = point;
-        entry.projected = projected;
+        projectPoint(point, yaw, pitch, view, entry.projected);
       }
     }
 

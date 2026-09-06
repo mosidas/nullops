@@ -1,7 +1,7 @@
 {
   "workflow": "sdd",
   "unit": "scatter3d-panes",
-  "state": "spec-approved",
+  "state": "tasks-generated",
   "approvals": {
     "spec": true,
     "tasks": false

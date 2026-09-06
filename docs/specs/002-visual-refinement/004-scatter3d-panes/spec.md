@@ -143,7 +143,7 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
     scratch: [Projected, Projected, Projected], out: LabelFrame,
   ): LabelFrame;
   ```
-- **入力 / 出力**: `elevationLabels` は目盛り 4 個(`tickValues(ELEVATION_RANGE, TICK_COUNT)` を `formatTick` した文字列)と軸名 1 個の計 5 個のラベルを `out` に書く(長さ 5)。`side` は `wall` の `along` に対する左右(`left` = `origin` 側の縦の辺、`right` = `origin + along × 2` 側の縦の辺)。錨は `wall` の `side` 側の縦の辺から、面に沿って外側へ `LABEL_GAP = 0.06`(モデル座標)離れた位置(`left` なら `origin − along × LABEL_GAP`、`right` なら `origin + along × (2 + LABEL_GAP)` を通る縦の線上)で、目盛りは値の高さ(`y = -1 + 2 × k / 3`)、軸名は `y` の中央(0)に置く。`labelFrame` は `label.anchor`・`anchor + along × ε`・`anchor + up × ε`(`ε = 0.01`)を `projectPoint` で投影し、その差分を `ε` で割ってスクリーン上の単位ベクトル `(ax, ay)`・`(ux, uy)` を得る。`out` には `a = ax`・`b = ay`・`c = -ux`・`d = -uy`(canvas の y 軸は下向きなので up を反転)・`e = anchor の sx`・`f = anchor の sy` と、`shrink = |(ax, ay)| / (錨の scale)`(面の横方向の縮み。真正面で 1、真横で 0)を書く。
+- **入力 / 出力**: `elevationLabels` は目盛り 4 個(`tickValues(ELEVATION_RANGE, TICK_COUNT)` を `formatTick` した文字列)と軸名 1 個の計 5 個のラベルを `out` に書く(長さ 5)。`side` は `wall` の `along` に対する左右(`left` = `origin` 側の縦の辺、`right` = `origin + along × 2` 側の縦の辺)。錨は `wall` の `side` 側の縦の辺から、面に沿って外側へ `LABEL_GAP = 0.06`(モデル座標)離れた位置(`left` なら `origin − along × LABEL_GAP`、`right` なら `origin + along × (2 + LABEL_GAP)` を通る縦の線上)で、目盛りは値の高さ(`y = -1 + 2 × k / 3`)、軸名は `y` の中央(0)に置く。`labelFrame` は `label.anchor`・`anchor + along × ε`・`anchor + up × ε`(`ε = 0.01`)を `projectPoint` で投影し、その差分を `ε` で割ってモデル座標 1 単位あたりのスクリーン px `(ax, ay)`・`(ux, uy)` を得る(単位ベクトルではない。大きさは `radius = min(view.width, view.height) / 2 × FILL` の桁)。ラベル画像は高さ `fontPx × devicePixelRatio` px で焼く(§6.2)ため、`setTransform` の係数は画像 1 px あたりに換算する。`k = 錨の scale / devicePixelRatio`(画像の高さ `fontPx × dpr` を画面の `fontPx × scale` px へ写す係数)とし、`out` には `a = ax / |(ax, ay)| × k`・`b = ay / |(ax, ay)| × k`・`c = -ux / |(ux, uy)| × k`・`d = -uy / |(ux, uy)| × k`(canvas の y 軸は下向きなので up を反転)・`e = anchor の sx`・`f = anchor の sy` と、`shrink = |(ax, ay)| / (錨の scale × radius)`(面の横方向の縮み。真正面で約 1、真横で 0)を書く。`|(ax, ay)|` または `|(ux, uy)|` が 0 のときは `a`〜`d` を 0 にする(描画側は `shrink` の下限で描かない)。
 - **事前条件**: `view.width`・`view.height` が 0 より大きい。`scratch` は effect の寿命で作った器 3 個。
 - **事後条件**: `labelFrame` は同じ引数につねに同じ値を書き、新しいオブジェクトを作らない。§6.1 の `along` の向きにより、奥向きの面のラベルでは `a ≥ 0`(文字が画面の左から右へ進む)。`a < 0` のラベル(奥向きでない面に貼った場合にだけ起きる)は描画側が描かない(鏡像を出さない。§6.2)。`tickValues([-0.10, 2.08], 4)` は `-0.10 + k × 2.18 / 3`(`k = 0..3`。誤差 1e-9 以内)、`formatTick` はそれぞれ `"-0.10"`・`"0.63"`・`"1.35"`・`"2.08"` を返す。
 - **エラー**: 返さない・投げない。`yaw`・`pitch` が NaN の場合は 0 とみなす。
@@ -269,7 +269,7 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
 1.1. システムは、`PANES` に縦 4 面と床の 5 面を持ち、各面の `corners` がすべて単位立方体の頂点で、`origin + along × 2`・`origin + up × 2`・`origin + along × 2 + up × 2` を含まなければならない。(常時)
 1.2. `selectBackWalls(yaw, out)` が呼ばれたとき、システムは法線の回転後 z 成分が 0 以下の縦 2 面を、その成分の昇順で `out` に書き、`out` と同一の参照を返さなければならない。(イベント)
 1.3. システムは、`yaw` が 0・π/2・π・3π/2 のちょうどのとき(2 面の成分が 0 で等しいとき)、識別子の辞書順で先の面を採らなければならない(同じ `yaw` につねに同じ結果)。(常時)
-1.4. システムは、`yaw` を 0 から 2π まで 1° 刻みで進めたとき、`selectBackWalls` の結果が変わる `yaw` を π/2 の整数倍の前後 1° 以内に限らなければならない(入れ替わりが真横を向く瞬間に限られる)。(常時)
+1.4. システムは、`yaw` を 0 から 2π まで 1° 刻みで進めたとき、`selectBackWalls` が返す 2 面の**集合**(順序を問わない)が変わる `yaw` を π/2 の整数倍の前後 1° 以内に限らなければならない(入れ替わりが真横を向く瞬間に限られる。2 面の順序は yaw = π/4 + π/2·k で入れ替わるが、順序は描画順を変えるだけで画は飛ばないため対象外)。(常時)
 1.5. `yaw` が NaN の場合、システムは 0 として扱い、例外を投げてはならない。(異常系)
 1.6. システムは、`selectBackWalls` と `PANES` の参照において新しいオブジェクト・配列を作ってはならない。(常時)
 1.7. システムは、`GRID_DIVISIONS` を 3、`GRID_STOPS` を `[0, 2/3, 4/3, 2]`(各 1e-9 以内)にしなければならない。(常時)
@@ -293,19 +293,19 @@ roadmap `002-visual-refinement` の unit #4。unit #3(`scatter3d-pointcloud`)の
 
 **対象**: §5.3 ラベルの定義と面に沿った変換 / §6.2 ラベル
 
-(3.1〜3.7 はテスト、3.8 は `Scatter3DPanel.tsx` の静的検査(描画関数の中に `fillText` が無く、ラベルの `drawImage` が 1 箇所)、3.9 は静的検査(描画順と、描画関数の最後の `setTransform` の引数)、3.10 は静的検査(`elevationLabels` の呼び出しが面の識別子の比較で囲われている)で確かめる。見た目は Requirement 10.4 の目視)
+(3.1〜3.7 はテスト(3.7 の下限は既定の配置では発火しないため、奥向きでない面など人為的な入力で確かめる)、3.8 は `Scatter3DPanel.tsx` の静的検査(描画関数の中に `fillText` が無く、ラベルの `drawImage` が 1 箇所)、3.9 は静的検査(描画順と、描画関数の最後の `setTransform` の引数)、3.10 は静的検査(`elevationLabels` の呼び出しが面の識別子の比較で囲われている)で確かめる。見た目は Requirement 10.4 の目視)
 
 **受け入れ基準**:
 3.1. `tickValues([-0.10, 2.08], 4)` が呼ばれたとき、システムは長さ 4 の昇順の配列を返し、`k` 番目の値を `-0.10 + k × 2.18 / 3`(`k = 0..3`)と 1e-9 以内で一致させなければならない。(イベント)
 3.2. `formatTick` が呼ばれたとき、システムは小数第 2 位までの文字列を返し、`-0.10`・`0.63`・`1.35`・`2.08` の 4 値と、`-0.001` に対して `"0.00"`(負の 0 を出さない)を返さなければならない。(イベント)
 3.3. システムは、画面に描く文字を目盛り 4 個と軸名 `Elevation` 1 個の計 5 個に限らなければならない(`elevationLabels` の出力が長さ 5)。(常時)
-3.4. `labelFrame` が呼ばれたとき、システムは `a`・`b` を錨における `along` 方向の投影の微分、`c`・`d` を `up` 方向の投影の微分の符号反転、`e`・`f` を錨の投影にし、同じ引数につねに同じ値を書き、新しいオブジェクトを作ってはならない。(イベント)
+3.4. `labelFrame` が呼ばれたとき、システムは `a`・`b` を錨における `along` 方向の投影の微分の単位ベクトル × `k`(`k = 錨の scale / devicePixelRatio`)、`c`・`d` を `up` 方向の投影の微分の単位ベクトルの符号反転 × `k`、`e`・`f` を錨の投影、`shrink` を `|along 方向の微分| / (錨の scale × radius)` にし、`yaw = 0`・`pitch = SCATTER_PITCH` の奥の面で `|(c, d)|` を `k` と 1e-6 以内で一致させ、同じ引数につねに同じ値を書き、新しいオブジェクトを作ってはならない。(イベント)
 3.5. システムは、`yaw` を 0 から 2π まで 1° 刻みで進め、各 `yaw` で `selectBackWalls` が返す 2 面に貼った `elevationLabels` の全ラベルについて `labelFrame` の `a` を求めたとき、すべて 0 以上でなければならない(奥向きの面の文字は左から右へ進む)。`a` が負のラベルがあれば、システムはそれを描いてはならない(鏡像を出さない)。(常時)
 3.6. システムは、`yaw` を変えたとき `labelFrame` の `a`〜`f` の少なくとも 1 つが変わること(ラベルが画面に固定されていないこと)を、`yaw = 0` と `yaw = 0.5` の比較で示さなければならない。(常時)
 3.7. `shrink` が 0.35 未満、または `fontPx × 錨の scale` が 8 未満のラベルについて、システムはそのラベルを描いてはならない。(異常系)
 3.8. 描画のとき、システムはラベルの画像をマウント時(または寸法・`devicePixelRatio` の変化時)に作ったオフスクリーン canvas から `drawImage` し、毎フレーム `fillText` を呼んではならない。(イベント)
 3.9. 描画のとき、システムはラベルを点より後に描き、描画の終わりに変換行列を基底(`devicePixelRatio` の拡大だけ)へ戻さなければならない。(イベント)
-3.10. `selectBackWalls` の結果が直前のフレームと同じ間、システムは `elevationLabels` を呼び直してはならない。(状態)
+3.10. `selectBackWalls` が返す 2 面の集合(順序を問わない)が直前のフレームと同じ間、システムは `elevationLabels` を呼び直してはならない。(状態)
 
 ### Requirement 4: 影
 

@@ -1,9 +1,9 @@
 {
   "workflow": "roadmap",
   "unit": "visual-refinement",
-  "state": "roadmap-generated",
+  "state": "roadmap-approved",
   "approvals": {
-    "roadmap": false
+    "roadmap": true
   },
   "created": "2026-09-06",
   "updated": "2026-09-06"

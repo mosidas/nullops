@@ -1,9 +1,9 @@
 {
   "workflow": "sdd",
   "unit": "scatter3d-controls",
-  "state": "spec-generated",
+  "state": "spec-approved",
   "approvals": {
-    "spec": false,
+    "spec": true,
     "tasks": false
   },
   "created": "2026-09-06",

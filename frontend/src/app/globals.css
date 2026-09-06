@@ -25,6 +25,14 @@
   --color-scatter-torus-low: #ffd54a;
   --color-scatter-torus-high: #ff6ea8;
 
+  /* 3D 散布図の地(背景)。深い青 2 色をノイズで補間する。 */
+  --color-scatter-bg-low: #061024;
+  --color-scatter-bg-high: #0e2244;
+  /* パネルの塗り・格子・縁の基本色。不透明度は描画側で焼き込む(0.06 / 0.16 / 0.45)。 */
+  --color-scatter-pane: #9fbcf0;
+  /* 目盛りと軸名の文字色。 */
+  --color-scatter-label: #e8eef8;
+
   --color-level-info: #7aa2f7;
   --color-level-warn: #e0af68;
   --color-level-error: #f7768e;

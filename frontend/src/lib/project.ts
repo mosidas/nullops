@@ -9,9 +9,11 @@ export type ProjectedCloud = { sx: Float32Array; sy: Float32Array; depth: Float3
 /**
  * ピッチ(X 軸まわりの固定の回転角)。点群を斜め上から見た画にする。
  *
+ * 符号と向きの対応: 正の値で床(y = -1)を上から見下ろす(奥の辺 z = -1 が画面で上に来る)。
+ * 負にすると床を下から見上げる向きになり、床のパネルと格子を描くと参考画像と逆になる(spec.md §6.8)。
  * 0 にすると Y 軸まわりの回転だけになり、回っても厚みが読み取れず平面に見える。
  */
-export const SCATTER_PITCH = -0.42;
+export const SCATTER_PITCH = 0.42;
 
 /**
  * カメラまでの距離。透視投影の `scale = f / (f - z')` の f。

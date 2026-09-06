@@ -228,3 +228,12 @@ describe('projectPointsOnto', () => {
     assert.ok(FILL > 0 && FILL <= 1);
   });
 });
+
+describe('SCATTER_PITCH', () => {
+  it('+0.42 で、yaw = 0 のとき床の奥の辺(z = -1)が手前の辺(z = 1)より画面で上に来る(Requirement 7.1・7.2)', () => {
+    assert.equal(SCATTER_PITCH, 0.42);
+    const far = projectPoint({ x: 0, y: -1, z: -1 }, 0, SCATTER_PITCH, VIEW, emptyProjected());
+    const nearEdge = projectPoint({ x: 0, y: -1, z: 1 }, 0, SCATTER_PITCH, VIEW, emptyProjected());
+    assert.ok(far.sy < nearEdge.sy, `far=${far.sy} near=${nearEdge.sy}`);
+  });
+});

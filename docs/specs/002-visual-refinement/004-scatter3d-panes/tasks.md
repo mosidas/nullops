@@ -93,8 +93,8 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
     - 仕様参照: spec.md §5.3・§6.2・Requirement 3.1〜3.6・3.11〜3.14
     - 検証コマンド: `(cd frontend && npm test)` が終了コード 0 で `labels.test.ts` が実行されている(3.3 は `elevationLabels` の出力が長さ 5、3.5 は 1° 刻み 360 点で `a ≥ 0`、3.13 は `dpr = 1` と `2` の両方) / `(cd frontend && npx tsc --noEmit)` が終了コード 0
 
-- [ ] 4. 地のノイズ・デザイントークン・既定ピッチ
-  - [ ] 4.1 `noise.ts` と `noise.test.ts` を作り、`globals.css` に 4 トークンを足し、`SCATTER_PITCH` を反転する (P)
+- [x] 4. 地のノイズ・デザイントークン・既定ピッチ
+  - [x] 4.1 `noise.ts` と `noise.test.ts` を作り、`globals.css` に 4 トークンを足し、`SCATTER_PITCH` を反転する (P)
     _Requirements: 5.1, 5.2, 5.3, 5.4, 7.1, 7.2, 7.3, 7.4_
     _Boundary: frontend/src/lib(ノイズ・投影の定数)・frontend/src/app(トークン)_
     _Interfaces: Produces `NOISE_SIZE`・`buildNoise(size, seed): Float32Array`(spec.md §5.5)、`SCATTER_PITCH = +0.42`(spec.md §6.8)、トークン `--color-scatter-bg-low`・`--color-scatter-bg-high`・`--color-scatter-pane`・`--color-scatter-label`(spec.md §6.6)_
@@ -135,3 +135,4 @@ CLAUDE.md が全タスクに掛ける制約(逐語)。
 - 1.1 完了(2026-09-07): `panes.ts`・`panes.test.ts` を作成。`Vec3` の定義元を `panes.ts` へ移し、`project.ts` は `panes.ts` から import、`axes.ts` は 5.1 で削除するまで `Vec3` を再 export するだけに変えた(既存の import を壊さないため)。検証: `npm test` 46 件 pass(`panes.test.ts` 10 件を含む)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / `grep -c "Math\.\(sin\|cos\)(" panes.ts` = 2。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)
 - 2.1 完了(2026-09-07): `projectPointsOnto` と `FILL` の export を `project.ts` に、`buildShadowRamp(stops, steps, alpha)` を `palette.ts` に追加。`buildRamp` は `buildShadowRamp` で帯ごとの行を作る形に改め、色文字列のテンプレートを `palette.ts` の 1 関数に閉じた。引数の順は spec.md §5.4 の `(points, axis, value, stride, yaw, pitch, view, out)` に従った(本ファイルの Interfaces 欄は `view` と `yaw, pitch` の順が逆で、spec.md を正とする)。`project.test.ts` の `Vec3` の import 元を `axes.ts` から `panes.ts` へ移した(5.1 の削除に備える)。検証: `npm test` 57 件 pass(2.1 で 11 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / (4.4)テストで三角関数 4 回を確認 / (8.5)`grep -rn "rgba(" frontend/src --include='*.ts' --include='*.tsx' | grep -v "\.test\.ts"` が `palette.ts` の 1 箇所
 - 3.1 完了(2026-09-07): `labels.ts`・`labels.test.ts` を作成。`elevationLabels` は `out` を空にしてから 5 個を書き(マウント時にだけ呼ぶため Label オブジェクトの生成を許す)、`labelFrame` は微分用のずらした点をモジュール定数の `Vec3` 1 個で使い回して新しいオブジェクトを作らない。3.4 のテストは `projectPoint` を呼ばず spec §5.3 の式を自前で計算して比較した。3.5 は既定ピッチの反転(4.1)前後の両方(±0.42)で 1° 刻み 361 点を走査し、重みが正の面の `a ≥ 0` を確認。検証: `npm test` 70 件 pass(3.1 で 13 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0。`wails build`・`go vet`・`go test` は本タスクでは未実行(TypeScript のみの変更。6.1 で全体を回す)
+- 4.1 完了(2026-09-07): `noise.ts`・`noise.test.ts` を作成(格子 8 px の値ノイズを smoothstep で補間。整数ハッシュで決定的に生成し、格子を循環させて端の継ぎ目を消す)。`globals.css` の `@theme` に 4 トークンを追加。`SCATTER_PITCH` を `0.42` に反転し、符号と向きの対応をコメントに明記。`project.test.ts` に 7.1・7.2 のテストを追加。`orbit.test.ts` は `SCATTER_PITCH` を import して比較するため変更なしで通る(6.2)。検証: `npm test` 75 件 pass(4.1 で 5 件追加)/ `npx tsc --noEmit` 終了コード 0 / `npm run lint` エラー 0 / (5.2)`grep -c "Math.random" noise.ts` = 0 / (7.1)`SCATTER_PITCH = 0.42` 1 件 / (7.4)「見下ろす」1 件 / (7.3)`orbit.ts` に差分なし / (8.5)トークン 4 件。`wails build`・`go vet`・`go test` は本タスクでは未実行(6.1 で全体を回す)

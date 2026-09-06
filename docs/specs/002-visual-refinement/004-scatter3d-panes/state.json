@@ -1,0 +1,15 @@
+{
+  "workflow": "sdd",
+  "unit": "scatter3d-panes",
+  "state": "completed",
+  "approvals": {
+    "spec": true,
+    "tasks": true
+  },
+  "created": "2026-09-07",
+  "updated": "2026-09-07",
+  "frozen": {
+    "spec.md": "d88e226c76e8d24a2411e01663e75bba031e2eea633f3469a06caf523de4b4da",
+    "tasks.md": "fd8673565d6de49fe5f4c07de82a45a17c538c1662028884786e2603764f6835"
+  }
+}

@@ -32,6 +32,17 @@ cd frontend && npm run lint
 cd frontend && npm run format
 ```
 
+`main.go` は `go:embed all:frontend/dist` を持つため、`frontend/dist`(`wails build` の生成物)が無い状態で `go vet ./...`・`go test ./...` を先に実行すると失敗する。検証は次の順序で行う。
+
+```bash
+cd frontend && npm ci
+wails build
+go vet ./...
+go test ./...
+cd frontend && npm test
+cd frontend && npm run lint
+```
+
 ## 技術スタック
 
 - Wails v2 / Go 1.25(バックエンド。擬似データの生成とフロントエンドへの供給)

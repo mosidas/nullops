@@ -31,3 +31,14 @@ wails build   # 配布用ビルド
 ```
 
 必要なもの: Go 1.25 以上、Node.js 24 以上、[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2。
+
+### フレーム時間の計測
+
+5 パネル(`commit`・`depgraph`・`gauge`・`scatter`・`timeseries`)のフレーム時間(n / mean / p95 / max)は配布ビルドで計測する。素の `wails build` はコンソールを開けないため、次の手順を踏む。
+
+1. `wails build -devtools` でビルドする。
+2. アプリを起動する。
+3. ⌘⇧F12 で Web インスペクタを開く。
+4. コンソールで `window.nullops.enableFrameStats()` を呼ぶ。60 フレームごとに 5 パネルぶんの値が出力される。
+
+描画の負荷を増やす変更をする際の設計指針は `docs/adr/0002-canvas2d-drawcall-budget-for-p95.md` を参照。

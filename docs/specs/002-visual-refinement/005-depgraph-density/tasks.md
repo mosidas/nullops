@@ -125,8 +125,8 @@
     - 仕様参照: spec.md §7 Requirement 5.8(凍結 spec 6.3 相当)
     - 検証コマンド: `go test ./... -run TestGraphSourceHealthChanges -v`
 
-- [ ] 5. 全体検証と p95・目視の申し送り
-  - [ ]* 5.1 全体検証コマンドを実行し、Implementation Notes に着手時 p95 と目視手順を記録する
+- [x] 5. 全体検証と p95・目視の申し送り
+  - [x]* 5.1 全体検証コマンドを実行し、Implementation Notes に着手時 p95 と目視手順を記録する
     _Requirements: 7.1, 7.2, 7.3, 8.1, 8.2, 8.4, 8.5_
     _Boundary: 全体_
     _Depends: 4.1, 3.1_
@@ -177,4 +177,7 @@
 - 1.1・1.2: 完了 / コミット 0926b71 / レビュー完了(本ターン)。`wails build` を通した上で `drawNodes`(`DependencyGraphPanel.tsx:366-389`)を確認し、`groupNodesByHealth` によるグループ化・群単位の `fillStyle` 設定・輪郭線描画(`colors.background`)・エッジ先ノード後の描画順序がいずれも要件どおりであることを目視で確認した。`npx tsc --noEmit`・`npm run lint`・`npm test`(70 件成功)がいずれも成功することを再確認済み。追加の修正なし(承認)。
 - 2 系・4.1: 完了 / 本ターンでコミット予定。`graphsource.go`(ノード数 36・クラスタ構造・錨算出・エッジ生成規則・`graphHealthChance` 調整)と `graphsource_test.go`(Requirement 1〜4 の新規テスト 9 本 + 既存テストの定数追随)、`app_test.go`(`graphNodeCount` の期待値更新)を変更した。`go vet ./...`・`go test ./...`・`wails build`・`cd frontend && npx tsc --noEmit && npm run lint` がいずれも成功。
 - 3.1: 完了 / 本ターンでコミット予定。`depgraph.ts` の `RADIUS_BASE_RATIO` を `0.022 → 0.0143`、`RADIUS_LOAD_RATIO` を `0.032 → 0.0208`(いずれも現行比 65%)に縮小した。`placeNode` のシグネチャ・引数・返り値の型は変更していない。コメントに調整理由(hub クラスタの密集対策)と、最終値は Requirement 8.3 の目視で中継役が判断する旨を記録した。`npm run lint`・`npx tsc --noEmit`・`npm test`(70 件成功)がいずれも成功。
-- 5 系(全体検証)は本ターンでは未着手。次ターンの最初のタスクは 5.1(Global Constraints の順序で全体検証コマンドを実行し、Implementation Notes に着手時 p95 ベースラインと目視手順を記録する)。
+- 5.1: 完了 / 本ターンでコミット予定。Global Constraints の順序(`npm ci` → `wails build` → `go vet ./...` → `go test ./...` → `npm test` → `npm run lint`)で全体検証を実行し、すべて成功を確認した(`wails build` は署名済みアプリのビルドまで成功、`go test ./...` は `nullops`・`nullops/feed` 両パッケージで成功、`npm test` は 70 件成功、`npm run lint` はエラー・修正なし)。`git diff main...HEAD -- frontend/package.json go.mod go.sum` の出力が空であることを確認し、可視化ライブラリの追加が無いこと(Requirement 7.3)を確認した。
+  - (a) 着手時 p95 ベースライン(再計測しない): unit #4 完了時点(2026-09-07、13 回の出力)で 5 パネルとも p95 17.0〜18.0 ms・mean 16.7 ms・max 18〜21 ms。閾値 20 ms に対する余裕は 2 ms 程度。
+  - (b) 完了時の p95 計測手順: `wails build -devtools` でビルドした配布用アプリを起動し、`docs/specs/001-dashboard-mvp/005-framestats-runtime/tasks.md` B 節の手順(devtools のパフォーマンスパネルで一定時間記録し、5 パネルそれぞれのフレーム時間 p95/mean/max を読む)で実測する。この実測は中継役がホストで実施する(実装者は実行しない)。
+  - (c) Requirement 8.1〜8.5(配布ビルドでの目視: hub クラスタの円の重なり具合、ノード密度の見た目、`RADIUS_BASE_RATIO`/`RADIUS_LOAD_RATIO` の最終値判断を含む)は中継役の目視待ちで「未検証」。タスク 3.1 で設定した縮小値(現行比 65%)は保守的な暫定値であり、目視の結果次第で追加調整が必要になる可能性がある旨をここに明記する。

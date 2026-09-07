@@ -575,16 +575,50 @@ func isConnected(n int, edges []graphEdgeSpec) bool {
 
 // 受け入れ基準 4.2: Next を 1000 回呼ぶ間、基幹エッジだけで見たグラフが
 // つねに連結である。
+//
+// graphCoreEdges(パッケージ変数)自体は乱数に依存せず不変なので、それだけを
+// 見ても Next の実装が毎フレーム基幹エッジを欠落なく積んでいるかは分からない。
+// そのため s.Next() が実際に返す Edges からも基幹エッジの対をすべて拾い出し、
+// その部分グラフが連結であることまで確かめる。
 func TestGraphSourceCoreEdgesAlwaysConnected(t *testing.T) {
 	if !isConnected(graphNodeCount, graphCoreEdges) {
 		t.Fatalf("基幹エッジだけで見たグラフが連結でない")
 	}
 
+	idIndex := make(map[string]int, graphNodeCount)
+	for i, id := range graphNodeIDs {
+		idIndex[id] = i
+	}
+
 	s := newTestGraphSource(t)
 	for f := range 1000 {
-		s.Next()
+		g := nextGraph(t, s)
+
 		if !isConnected(graphNodeCount, graphCoreEdges) {
 			t.Fatalf("フレーム %d: 基幹エッジだけで見たグラフが連結でない", f)
+		}
+
+		seen := make(map[[2]int]struct{}, len(graphCoreEdges))
+		for _, e := range g.Edges {
+			from, ok := idIndex[e.From]
+			if !ok {
+				continue
+			}
+			to, ok := idIndex[e.To]
+			if !ok {
+				continue
+			}
+			seen[[2]int{from, to}] = struct{}{}
+		}
+		actualCore := make([]graphEdgeSpec, 0, len(graphCoreEdges))
+		for _, spec := range graphCoreEdges {
+			if _, ok := seen[[2]int{spec.from, spec.to}]; !ok {
+				t.Fatalf("フレーム %d: Next の戻り値から基幹エッジが欠けた: %v", f, spec)
+			}
+			actualCore = append(actualCore, spec)
+		}
+		if !isConnected(graphNodeCount, actualCore) {
+			t.Fatalf("フレーム %d: Next の戻り値の基幹エッジだけで見たグラフが連結でない", f)
 		}
 	}
 }

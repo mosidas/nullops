@@ -335,7 +335,34 @@ function drawEdges(
   ctx.globalAlpha = 1;
 }
 
-/** ノードの円を健康状態の色で塗る（受け入れ基準 10.5）。 */
+/**
+ * ノードを健康状態でまとめる。
+ *
+ * `drawNodes` から切り出すのは、`fillStyle` の切り替え回数がノード数によらず
+ * 健康状態の異なる値の種類数（最大 3）に収まることを、この関数の出力
+ * （グループ数）だけを見て検証できるようにするため（受け入れ基準 6.1）。
+ */
+function groupNodesByHealth(nodes: readonly main.GraphNode[]): Map<string, main.GraphNode[]> {
+  const groups = new Map<string, main.GraphNode[]>();
+  for (const node of nodes) {
+    const group = groups.get(node.health);
+    if (group === undefined) {
+      groups.set(node.health, [node]);
+    } else {
+      group.push(node);
+    }
+  }
+  return groups;
+}
+
+/**
+ * ノードの円を健康状態の色で塗る（受け入れ基準 10.5）。
+ *
+ * 健康状態ごとにまとめて描くのは、ノード数が増えても `ctx.fillStyle` への
+ * 代入回数をそのフレームに存在する健康状態の種類数（最大 3）に抑えるため
+ * （受け入れ基準 6.1）。描画順序（エッジが先・ノードが後）と輪郭線の描画は
+ * 変えない（受け入れ基準 6.2）。
+ */
 function drawNodes(
   ctx: CanvasRenderingContext2D,
   nodes: readonly main.GraphNode[],
@@ -346,16 +373,18 @@ function drawNodes(
   ctx.strokeStyle = colors.background;
   ctx.lineWidth = NODE_STROKE_WIDTH;
 
-  for (const node of nodes) {
-    const placement = placements.get(node.id);
-    if (placement === undefined) {
-      continue;
+  for (const [health, group] of groupNodesByHealth(nodes)) {
+    ctx.fillStyle = healthColor(health, colors);
+    for (const node of group) {
+      const placement = placements.get(node.id);
+      if (placement === undefined) {
+        continue;
+      }
+      ctx.beginPath();
+      ctx.arc(placement.cx, placement.cy, placement.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
     }
-    ctx.fillStyle = healthColor(node.health, colors);
-    ctx.beginPath();
-    ctx.arc(placement.cx, placement.cy, placement.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   }
 }
 

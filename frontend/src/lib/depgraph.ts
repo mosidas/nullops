@@ -17,9 +17,17 @@ export type NodePlacement = { cx: number; cy: number; radius: number };
  */
 const FIT_RATIO = 0.42;
 
-/** ノードの半径の下限と、負荷 1.0 で足される幅（いずれも描画領域の短辺に対する比）。 */
-const RADIUS_BASE_RATIO = 0.022;
-const RADIUS_LOAD_RATIO = 0.032;
+/**
+ * ノードの半径の下限と、負荷 1.0 で足される幅（いずれも描画領域の短辺に対する比）。
+ *
+ * hub クラスタは 14 ノードがスプレッド半径 0.32 の円内に密集する
+ * （spec.md §6.6）。旧値（0.022 / 0.032）のままだと高負荷ノードの円が
+ * 隣接ノードと塗り潰し合うほど重なるおそれがあるため、現行比 65% へ縮小した
+ * 暫定値にする（unit #5 depgraph-density タスク 3.1）。最終値は配布ビルドの
+ * 目視（Requirement 8.3）で中継役が判断する。
+ */
+const RADIUS_BASE_RATIO = 0.0143;
+const RADIUS_LOAD_RATIO = 0.0208;
 
 /** ノードの半径の下限（CSS ピクセル）。小さい枠でも円が消えないようにする。 */
 const MIN_RADIUS = 1.5;

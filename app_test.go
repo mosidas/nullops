@@ -463,8 +463,10 @@ func TestStartupUsesSpecifiedGraphPanelParameters(t *testing.T) {
 	if appCommitCapacity != 120 {
 		t.Errorf("コミットの保持上限が一致しない: got %d, want 120", appCommitCapacity)
 	}
-	if graphNodeCount != 10 {
-		t.Errorf("ノード数が一致しない: got %d, want 10", graphNodeCount)
+	// spec.md(depgraph-density)§7 が凍結 spec 4.3 を置き換え、
+	// ノード数を 10 から 36 にした(Requirement 1.1)。
+	if graphNodeCount != 36 {
+		t.Errorf("ノード数が一致しない: got %d, want 36", graphNodeCount)
 	}
 }
 

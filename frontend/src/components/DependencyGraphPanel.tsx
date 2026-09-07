@@ -388,6 +388,12 @@ function drawNodes(
   ctx.lineWidth = NODE_STROKE_WIDTH;
 
   for (const [health, group] of groupNodesByHealth(nodes, healthGroups)) {
+    // 使い回す Map は前フレームのキーを残す（groupNodesByHealth 参照）ため、
+    // 今フレームに該当ノードが無いグループは fillStyle を代入せず読み飛ばす
+    // (受け入れ基準 6.1: 代入回数をそのフレームに存在する種類数以下に保つ)。
+    if (group.length === 0) {
+      continue;
+    }
     ctx.fillStyle = healthColor(health, colors);
     for (const node of group) {
       const placement = placements.get(node.id);

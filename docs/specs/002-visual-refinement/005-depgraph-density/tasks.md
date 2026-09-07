@@ -103,8 +103,8 @@
     - 仕様参照: spec.md §7 Requirement 4・5
     - 検証コマンド: `go test ./... -v`
 
-- [ ] 3. `depgraph.ts` の半径比率を調整する(hub クラスタの重なり対策・目視待ちの暫定実装)
-  - [ ] 3.1 `RADIUS_BASE_RATIO` / `RADIUS_LOAD_RATIO` を縮小する
+- [x] 3. `depgraph.ts` の半径比率を調整する(hub クラスタの重なり対策・目視待ちの暫定実装)
+  - [x] 3.1 `RADIUS_BASE_RATIO` / `RADIUS_LOAD_RATIO` を縮小する
     _Requirements: 8.3_
     (§2 対象の調整。8.3 の目視判定を満たすための事前調整であり、目視自体は実装者が行わない)
     _Boundary: depgraph(フロントエンド配置計算)_
@@ -176,4 +176,5 @@
 
 - 1.1・1.2: 完了 / コミット 0926b71 / レビュー完了(本ターン)。`wails build` を通した上で `drawNodes`(`DependencyGraphPanel.tsx:366-389`)を確認し、`groupNodesByHealth` によるグループ化・群単位の `fillStyle` 設定・輪郭線描画(`colors.background`)・エッジ先ノード後の描画順序がいずれも要件どおりであることを目視で確認した。`npx tsc --noEmit`・`npm run lint`・`npm test`(70 件成功)がいずれも成功することを再確認済み。追加の修正なし(承認)。
 - 2 系・4.1: 完了 / 本ターンでコミット予定。`graphsource.go`(ノード数 36・クラスタ構造・錨算出・エッジ生成規則・`graphHealthChance` 調整)と `graphsource_test.go`(Requirement 1〜4 の新規テスト 9 本 + 既存テストの定数追随)、`app_test.go`(`graphNodeCount` の期待値更新)を変更した。`go vet ./...`・`go test ./...`・`wails build`・`cd frontend && npx tsc --noEmit && npm run lint` がいずれも成功。
-- 3 系(`depgraph.ts` の半径比率調整)・5 系(全体検証)は本ターンでは未着手。次ターンの最初のタスクは 3.1(hub クラスタ 14 ノードがスプレッド半径 0.32 に密集するため、`RADIUS_BASE_RATIO`/`RADIUS_LOAD_RATIO` の縮小を検討する)。
+- 3.1: 完了 / 本ターンでコミット予定。`depgraph.ts` の `RADIUS_BASE_RATIO` を `0.022 → 0.0143`、`RADIUS_LOAD_RATIO` を `0.032 → 0.0208`(いずれも現行比 65%)に縮小した。`placeNode` のシグネチャ・引数・返り値の型は変更していない。コメントに調整理由(hub クラスタの密集対策)と、最終値は Requirement 8.3 の目視で中継役が判断する旨を記録した。`npm run lint`・`npx tsc --noEmit`・`npm test`(70 件成功)がいずれも成功。
+- 5 系(全体検証)は本ターンでは未着手。次ターンの最初のタスクは 5.1(Global Constraints の順序で全体検証コマンドを実行し、Implementation Notes に着手時 p95 ベースラインと目視手順を記録する)。

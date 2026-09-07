@@ -150,4 +150,5 @@
 
 (dev-implement がタスクの完了ごとに 1 行追記する。圧縮をまたぐ再開の基準になる)
 
-- 1.1・1.2: 完了 / コミット (このコミット) / レビュー未実施(時間枠の制約により自己検証のみ。次ターンで dev-reviewer によるレビューを推奨)
+- 1.1・1.2: 完了 / コミット 0926b71 / レビュー完了(本ターン)。`wails build` を通した上で `drawNodes`(`DependencyGraphPanel.tsx:366-389`)を確認し、`groupNodesByHealth` によるグループ化・群単位の `fillStyle` 設定・輪郭線描画(`colors.background`)・エッジ先ノード後の描画順序がいずれも要件どおりであることを目視で確認した。`npx tsc --noEmit`・`npm run lint`・`npm test`(70 件成功)がいずれも成功することを再確認済み。追加の修正なし(承認)。
+- 2 系(`graphsource.go` のノード数・クラスタ構造書き換え)は本ターンの時間枠内では未着手。次ターンの最初のタスク。

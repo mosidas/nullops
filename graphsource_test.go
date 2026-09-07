@@ -1,7 +1,9 @@
 package main
 
 import (
+	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -311,7 +313,7 @@ func TestGraphSourceInvariantsAcrossSeeds(t *testing.T) {
 // ノードは graphNodeCount、エッジは基幹と揺らぎの候補の合計を超えない。
 func TestGraphSourceBoundedSize(t *testing.T) {
 	s := newTestGraphSource(t)
-	maxEdges := len(graphCoreEdges) + len(graphOptionalEdges)
+	maxEdges := len(graphCoreEdges) + graphOptionalEdgeCount
 	for range 500 {
 		g := nextGraph(t, s)
 		if len(g.Nodes) != graphNodeCount {
@@ -320,5 +322,300 @@ func TestGraphSourceBoundedSize(t *testing.T) {
 		if len(g.Edges) > maxEdges {
 			t.Fatalf("Edges が上限を超えた: %d > %d", len(g.Edges), maxEdges)
 		}
+	}
+}
+
+// 受け入れ基準 1.1・1.2・1.3: ノード数が 36 個(graphNodeCount)であること。
+func TestGraphSourceNodeCountIs36(t *testing.T) {
+	if graphNodeCount != 36 {
+		t.Fatalf("graphNodeCount が 36 でない: %d", graphNodeCount)
+	}
+	if len(graphNodeIDs) != graphNodeCount {
+		t.Fatalf("graphNodeIDs の要素数が graphNodeCount と異なる: %d", len(graphNodeIDs))
+	}
+
+	s := newTestGraphSource(t)
+	if len(s.Snapshot().Nodes) != 36 {
+		t.Fatalf("Snapshot 直後の Nodes の長さが 36 でない: %d", len(s.Snapshot().Nodes))
+	}
+	g := nextGraph(t, s)
+	if len(g.Nodes) != 36 {
+		t.Fatalf("Next の Nodes の長さが 36 でない: %d", len(g.Nodes))
+	}
+}
+
+// assertSparseAnchors は受け入れ基準 2.1・2.2・2.3 を検証する。
+//
+// s の初期状態(newGraphSource 直後)の錨集合について、角度間隔が一様でなく、
+// 距離の標本標準偏差が一定以上あり、密な組・疎な組が両方存在することを確かめる。
+func assertSparseAnchors(t *testing.T, s *graphSource) {
+	t.Helper()
+
+	type point struct{ x, y float64 }
+	points := make([]point, len(s.nodes))
+	for i, n := range s.nodes {
+		points[i] = point{n.anchorX, n.anchorY}
+	}
+
+	// 2.1: 角度でソートし、隣接角度差(360° をまたぐ組を含む)の最大値と
+	// 最小値の差が 5° を超えること。
+	angles := make([]float64, len(points))
+	for i, p := range points {
+		a := math.Atan2(p.y, p.x) * 180 / math.Pi
+		if a < 0 {
+			a += 360
+		}
+		angles[i] = a
+	}
+	sort.Float64s(angles)
+	minGap, maxGap := math.Inf(1), math.Inf(-1)
+	for i := range angles {
+		next := angles[(i+1)%len(angles)]
+		gap := next - angles[i]
+		if gap < 0 {
+			gap += 360
+		}
+		if gap < minGap {
+			minGap = gap
+		}
+		if gap > maxGap {
+			maxGap = gap
+		}
+	}
+	if maxGap-minGap <= 5 {
+		t.Fatalf("角度間隔が一様すぎる: max=%v min=%v", maxGap, minGap)
+	}
+
+	// 2.2: 原点からの距離の標本標準偏差が 0.05 より大きいこと。
+	dists := make([]float64, len(points))
+	sum := 0.0
+	for i, p := range points {
+		dists[i] = math.Hypot(p.x, p.y)
+		sum += dists[i]
+	}
+	mean := sum / float64(len(dists))
+	variance := 0.0
+	for _, d := range dists {
+		variance += (d - mean) * (d - mean)
+	}
+	variance /= float64(len(dists))
+	stddev := math.Sqrt(variance)
+	if stddev <= 0.05 {
+		t.Fatalf("距離の標本標準偏差が小さすぎる: %v", stddev)
+	}
+
+	// 2.3: 少なくとも 1 組が 0.2 未満、少なくとも 1 組が 0.9 より大きいこと。
+	hasDense, hasSparse := false, false
+	for i := range points {
+		for j := i + 1; j < len(points); j++ {
+			d := math.Hypot(points[i].x-points[j].x, points[i].y-points[j].y)
+			if d < 0.2 {
+				hasDense = true
+			}
+			if d > 0.9 {
+				hasSparse = true
+			}
+		}
+	}
+	if !hasDense {
+		t.Fatalf("錨間距離 0.2 未満の組が無い")
+	}
+	if !hasSparse {
+		t.Fatalf("錨間距離 0.9 より大きい組が無い")
+	}
+}
+
+// 受け入れ基準 2.1・2.2・2.3。
+func TestGraphSourceAnchorsAreSparse(t *testing.T) {
+	assertSparseAnchors(t, newTestGraphSource(t))
+}
+
+// 受け入れ基準 2.5: 異なる種でも 2.1〜2.3 を満たす。
+func TestGraphSourceInvariantsAcrossSeedsSparseness(t *testing.T) {
+	for seed := int64(1); seed <= 20; seed++ {
+		s := newGraphSource(rand.New(rand.NewSource(seed)))
+		assertSparseAnchors(t, s)
+	}
+}
+
+// TestGraphSourceClusterAngleNotUniform は受け入れ基準 2.1〜2.3 の抜け穴
+// (クラスタ内部だけが等角に並ぶ)を補うホワイトボックステスト(中継役指示)。
+//
+// 各クラスタの非ハブノードの錨をクラスタ中心からの相対角度でソートし、
+// 隣接角度差が完全に均一でないことを確かめる(角度が rnd で独立に選ばれる
+// ため、非ハブ数が複数あるクラスタで完全な等間隔になる確率は無視できるほど
+// 小さい)。
+func TestGraphSourceClusterAngleNotUniform(t *testing.T) {
+	s := newTestGraphSource(t)
+
+	for ci, c := range graphClusters {
+		centerAngleRad := c.centerAngleDeg * math.Pi / 180
+		cx := c.centerRadius * math.Cos(centerAngleRad)
+		cy := c.centerRadius * math.Sin(centerAngleRad)
+
+		var angles []float64
+		for i := 1; i < c.count; i++ {
+			n := s.nodes[c.startIndex+i]
+			a := math.Atan2(n.anchorY-cy, n.anchorX-cx) * 180 / math.Pi
+			if a < 0 {
+				a += 360
+			}
+			angles = append(angles, a)
+		}
+		sort.Float64s(angles)
+
+		gaps := make([]float64, len(angles))
+		for i := range angles {
+			next := angles[(i+1)%len(angles)]
+			gap := next - angles[i]
+			if gap < 0 {
+				gap += 360
+			}
+			gaps[i] = gap
+		}
+
+		uniform := true
+		for i := 1; i < len(gaps); i++ {
+			if math.Abs(gaps[i]-gaps[0]) > 0.01 {
+				uniform = false
+				break
+			}
+		}
+		if uniform {
+			t.Fatalf("クラスタ %d: 非ハブの角度間隔が完全に等間隔になっている(抜け穴): %v", ci, gaps)
+		}
+	}
+}
+
+// 受け入れ基準 2.4: Next を 1000 回呼んでも非公開の錨座標が変わらない。
+func TestGraphSourceAnchorsInvariantOverManyFrames(t *testing.T) {
+	s := newTestGraphSource(t)
+
+	wantX := make([]float64, len(s.nodes))
+	wantY := make([]float64, len(s.nodes))
+	for i, n := range s.nodes {
+		wantX[i], wantY[i] = n.anchorX, n.anchorY
+	}
+
+	for f := range 1000 {
+		s.Next()
+		for i, n := range s.nodes {
+			if n.anchorX != wantX[i] || n.anchorY != wantY[i] {
+				t.Fatalf("フレーム %d: ノード %d の錨座標が変わった", f, i)
+			}
+		}
+	}
+}
+
+// 受け入れ基準 3.1・3.2・3.3: 各クラスタでハブのオフセット半径が 0、
+// 非ハブは 0 より真に大きく spread 以下。
+func TestGraphSourceHubOffsetIsZero(t *testing.T) {
+	s := newTestGraphSource(t)
+
+	for ci, c := range graphClusters {
+		centerAngleRad := c.centerAngleDeg * math.Pi / 180
+		cx := c.centerRadius * math.Cos(centerAngleRad)
+		cy := c.centerRadius * math.Sin(centerAngleRad)
+
+		hub := s.nodes[c.startIndex]
+		hubOffset := math.Hypot(hub.anchorX-cx, hub.anchorY-cy)
+		if hubOffset > 1e-9 {
+			t.Fatalf("クラスタ %d: ローカルハブのオフセット半径が 0 でない: %v", ci, hubOffset)
+		}
+
+		for i := 1; i < c.count; i++ {
+			n := s.nodes[c.startIndex+i]
+			offset := math.Hypot(n.anchorX-cx, n.anchorY-cy)
+			if offset <= 0 {
+				t.Fatalf("クラスタ %d: 非ハブ %d のオフセット半径が 0 以下: %v", ci, i, offset)
+			}
+			if offset > c.spread+1e-9 {
+				t.Fatalf("クラスタ %d: 非ハブ %d のオフセット半径が spread を超えた: %v > %v", ci, i, offset, c.spread)
+			}
+		}
+	}
+}
+
+// 受け入れ基準 4.1: 基幹エッジの本数がちょうど 35 本(36 ノードの全域木)。
+func TestGraphSourceCoreEdgeCount(t *testing.T) {
+	if len(graphCoreEdges) != 35 {
+		t.Fatalf("基幹エッジの本数が 35 でない: %d", len(graphCoreEdges))
+	}
+}
+
+// isConnected は edges だけを辺集合として見たとき、0..n-1 の全頂点が
+// 1 つの連結成分に属するかどうかを判定する(Union-Find)。
+func isConnected(n int, edges []graphEdgeSpec) bool {
+	parent := make([]int, n)
+	for i := range parent {
+		parent[i] = i
+	}
+	var find func(int) int
+	find = func(x int) int {
+		for parent[x] != x {
+			parent[x] = parent[parent[x]]
+			x = parent[x]
+		}
+		return x
+	}
+	for _, e := range edges {
+		ra, rb := find(e.from), find(e.to)
+		if ra != rb {
+			parent[ra] = rb
+		}
+	}
+	root := find(0)
+	for i := 1; i < n; i++ {
+		if find(i) != root {
+			return false
+		}
+	}
+	return true
+}
+
+// 受け入れ基準 4.2: Next を 1000 回呼ぶ間、基幹エッジだけで見たグラフが
+// つねに連結である。
+func TestGraphSourceCoreEdgesAlwaysConnected(t *testing.T) {
+	if !isConnected(graphNodeCount, graphCoreEdges) {
+		t.Fatalf("基幹エッジだけで見たグラフが連結でない")
+	}
+
+	s := newTestGraphSource(t)
+	for f := range 1000 {
+		s.Next()
+		if !isConnected(graphNodeCount, graphCoreEdges) {
+			t.Fatalf("フレーム %d: 基幹エッジだけで見たグラフが連結でない", f)
+		}
+	}
+}
+
+// 受け入れ基準 4.3: Next を 1000 回呼ぶ間、Edges の本数が 71 本以下。
+func TestGraphSourceEdgeCountUpperBound(t *testing.T) {
+	s := newTestGraphSource(t)
+	const maxEdges = 71
+	for f := range 1000 {
+		g := nextGraph(t, s)
+		if len(g.Edges) > maxEdges {
+			t.Fatalf("フレーム %d: Edges が上限を超えた: %d > %d", f, len(g.Edges), maxEdges)
+		}
+	}
+}
+
+// 受け入れ基準 4.4: Next を 100 回呼ぶ間、Edges の本数が変化するフレームが
+// 1 回以上ある(TestGraphSourceEdgeCountChanges と同内容だが、Requirement 4
+// の観点で明示的に持つ)。
+func TestGraphSourceEdgeCountVariesAcrossFrames(t *testing.T) {
+	s := newTestGraphSource(t)
+	prev := len(nextGraph(t, s).Edges)
+	changed := false
+	for range 99 {
+		got := len(nextGraph(t, s).Edges)
+		if got != prev {
+			changed = true
+		}
+		prev = got
+	}
+	if !changed {
+		t.Fatalf("100 フレームのあいだに Edges の本数が変わらなかった")
 	}
 }

@@ -20,14 +20,35 @@ const graphInterval = 1000 * time.Millisecond
 //
 // ノードを増減させると錨の配置が毎回変わり、図が落ち着かない。
 // 完了条件が求める「増減」はエッジと健康状態の変化で満たす。
-const graphNodeCount = 10
+const graphNodeCount = 36
 
-// graphAnchorRadius は錨を置く円環の半径。
+// graphMinNodeDistance は同一クラスタ内(ローカルハブを除く)の錨どうしが
+// 最低限保つべき距離(spec.md §6.6 手順 4)。
+const graphMinNodeDistance = 0.05
+
+// graphMaxAnchorRetries は最小距離を満たす角度を引き直す最大回数。
+// 力学モデルの反復と違い、試行回数に上限を持たせる(spec.md §3 前提 2)。
+const graphMaxAnchorRetries = 20
+
+// graphCluster はノードの錨をまとめる塊 1 つ分の配置パラメータ(spec.md §6.6)。
+type graphCluster struct {
+	startIndex     int     // クラスタの先頭ノードの添字。この添字がローカルハブ
+	count          int     // クラスタに属するノード数
+	centerRadius   float64 // クラスタ中心の原点からの距離
+	centerAngleDeg float64 // クラスタ中心の角度(度)
+	spread         float64 // クラスタ中心からの錨の広がり半径
+}
+
+// graphClusters は 4 つのクラスタの配置定義(spec.md §6.6 の表)。
 //
-// 単位正方形の内側に収め、ドリフトの揺らぎを足しても壁へ貼り付かない値。
-// 円環に置くのはエッジが中央を横切って読める図になるためであり、
-// 力学モデルを実装しないための手口である(spec.md §3 前提 4)。
-const graphAnchorRadius = 0.72
+// 中心の角度を等間隔にしないのは、クラスタの並び自体が等角配置に見えると
+// 本 unit が解消しようとしている見た目が塊の単位で再現されてしまうため。
+var graphClusters = [4]graphCluster{
+	{startIndex: 0, count: 14, centerRadius: 0.10, centerAngleDeg: 0, spread: 0.32},
+	{startIndex: 14, count: 8, centerRadius: 0.55, centerAngleDeg: 150, spread: 0.16},
+	{startIndex: 22, count: 7, centerRadius: 0.68, centerAngleDeg: 260, spread: 0.14},
+	{startIndex: 29, count: 7, centerRadius: 0.82, centerAngleDeg: 40, spread: 0.12},
+}
 
 // ノードの漂わせ方のパラメータ。unit #2 の drift / clampUnit をそのまま使う。
 //
@@ -54,8 +75,11 @@ const (
 // graphHealthChance は 1 フレームで 1 ノードの健康状態が遷移する確率。
 //
 // 1000 フレームのあいだに必ず何度か起きる一方、毎秒 1 回の送出で
-// 目が追える頻度に収まる大きさ(10 ノードで期待 0.15 回/フレーム)。
-const graphHealthChance = 0.015
+// 目が追える頻度に収まる大きさ(36 ノードで期待 0.15 回/フレーム。
+// 旧: 10 ノードで 0.015。ノード数が 3.6 倍になったため、点滅の見た目の
+// 頻度を据え置く比率で下げた。spec.md §7 受け入れ基準 5.8 は下限のみを
+// 定めており、この値でも 1000 フレームに 1 回以上は確実に起きる)。
+const graphHealthChance = 0.015 * 10.0 / 36.0
 
 // graphEdgeToggleChance は 1 フレームで 1 本の揺らぎエッジが付け外しされる確率。
 //
@@ -66,37 +90,85 @@ const graphEdgeToggleChance = 0.06
 // graphNodeIDs は画面へ出すノード名。英語のまま置く(CLAUDE.md 言語規約)。
 //
 // 並びが錨の順序を決める。この配列を Next で変えない(受け入れ基準 6.5)。
+// 添字 0〜13 は hub クラスタ、14〜21 はクラスタ 1、22〜28 はクラスタ 2、
+// 29〜35 はクラスタ 3(graphClusters の startIndex と対応)。
+// 各クラスタの先頭(添字 0 相当)がローカルハブ。
 var graphNodeIDs = [graphNodeCount]string{
-	"api-gateway",
-	"auth",
-	"ingest",
-	"queue",
-	"worker",
-	"store",
-	"cache",
-	"search",
-	"metrics",
-	"notify",
+	// クラスタ 0(hub、14 個。既存 10 個 + 4 個)
+	"api-gateway", "auth", "ingest", "queue", "worker",
+	"store", "cache", "search", "metrics", "notify",
+	"router", "config", "session", "webhook",
+	// クラスタ 1(8 個)
+	"billing", "email", "scheduler", "analytics",
+	"reporting", "invoicing", "ledger", "payments",
+	// クラスタ 2(7 個)
+	"media", "thumbnail", "transcoder", "upload",
+	"cdn-edge", "encoder", "playlist",
+	// クラスタ 3(7 個)
+	"audit", "backup", "archive", "retention",
+	"compliance", "snapshot", "replication",
 }
 
-// graphCoreEdges は基幹エッジ。つねに Edges に含める(受け入れ基準 6.4)。
+// buildCoreEdges は基幹エッジ(クラスタ内スポーク + バックボーン)を組み立てる。
 //
-// 円環の隣接 10 本と弦 2 本から成る。全ノードが 1 つの連結成分に留まるため、
-// 揺らぎエッジがどう外れてもグラフが断片化して図が読めなくなることがない。
-var graphCoreEdges = []graphEdgeSpec{
-	{0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5},
-	{5, 6}, {6, 7}, {7, 8}, {8, 9}, {9, 0},
-	{0, 5}, {2, 7},
+// クラスタごとの先頭ノード(startIndex)をローカルハブとし、同クラスタの
+// 他の全ノードからハブへ 1 本ずつ張る(スポーク)。加えて hub クラスタ以外の
+// ローカルハブから hub クラスタのローカルハブへ 1 本ずつ張る(バックボーン)。
+// 36 ノードの全域木になり、常に連結を保つ(spec.md §6.6)。
+func buildCoreEdges() []graphEdgeSpec {
+	edges := make([]graphEdgeSpec, 0, 35)
+	for _, c := range graphClusters {
+		hub := c.startIndex
+		for i := 1; i < c.count; i++ {
+			edges = append(edges, graphEdgeSpec{from: c.startIndex + i, to: hub})
+		}
+	}
+	hub0 := graphClusters[0].startIndex
+	for _, c := range graphClusters[1:] {
+		edges = append(edges, graphEdgeSpec{from: c.startIndex, to: hub0})
+	}
+	return edges
 }
 
-// graphOptionalEdges は揺らぎエッジの候補。確率で付け外しされる。
+// graphCoreEdges は基幹エッジ。つねに Edges に含める(受け入れ基準 4.1・5.9)。
 //
-// 基幹エッジと重複しない組だけを並べる。重複させると同じ (From, To) が
-// 2 本現れて DependencyGraph の不変条件を破る(受け入れ基準 5.5)。
-var graphOptionalEdges = []graphEdgeSpec{
-	{0, 3}, {1, 6}, {2, 8}, {3, 9},
-	{4, 9}, {5, 1}, {6, 2}, {8, 4},
+// クラスタ構造(graphClusters)からのみ導かれ、乱数に依存しない。
+var graphCoreEdges = buildCoreEdges()
+
+// graphOptionalEdgeCount は揺らぎエッジの候補本数(spec.md §6.6)。
+const graphOptionalEdgeCount = 36
+
+// buildOptionalEdgeCandidates は基幹エッジと重複しない全ての組を列挙する。
+//
+// クラスタ内の非隣接ペアとクラスタ間のペアが混在する(spec.md §6.6)。
+// 重複させると同じ (From, To) が 2 本現れて DependencyGraph の
+// 不変条件を破る(受け入れ基準 5.5)ため、基幹エッジの組を除く。
+func buildOptionalEdgeCandidates(core []graphEdgeSpec) []graphEdgeSpec {
+	coreSet := make(map[[2]int]bool, len(core))
+	for _, e := range core {
+		a, b := e.from, e.to
+		if a > b {
+			a, b = b, a
+		}
+		coreSet[[2]int{a, b}] = true
+	}
+
+	candidates := make([]graphEdgeSpec, 0, graphNodeCount*graphNodeCount/2)
+	for i := 0; i < graphNodeCount; i++ {
+		for j := i + 1; j < graphNodeCount; j++ {
+			if coreSet[[2]int{i, j}] {
+				continue
+			}
+			candidates = append(candidates, graphEdgeSpec{from: i, to: j})
+		}
+	}
+	return candidates
 }
+
+// graphOptionalEdgeCandidates は揺らぎエッジの候補プール。乱数に依存しない
+// (どの組が候補になりうるかは構造だけで決まる)。newGraphSource がこの中から
+// graphOptionalEdgeCount 本を rnd で重複なく選ぶ。
+var graphOptionalEdgeCandidates = buildOptionalEdgeCandidates(graphCoreEdges)
 
 // graphEdgeSpec はエッジの端点をノードの添字で表す。
 //
@@ -155,30 +227,31 @@ func newGraphSource(rnd *rand.Rand) *graphSource {
 		panic("newGraphSource の rnd は nil であってはならない")
 	}
 
+	anchorX, anchorY := computeAnchors(rnd)
+
 	nodes := make([]graphNodeState, graphNodeCount)
 	for i := range nodes {
-		angle := 2 * math.Pi * float64(i) / graphNodeCount
-		ax := graphAnchorRadius * math.Cos(angle)
-		ay := graphAnchorRadius * math.Sin(angle)
 		nodes[i] = graphNodeState{
 			id:         graphNodeIDs[i],
-			anchorX:    ax,
-			anchorY:    ay,
-			x:          ax,
-			y:          ay,
+			anchorX:    anchorX[i],
+			anchorY:    anchorY[i],
+			x:          anchorX[i],
+			y:          anchorY[i],
 			load:       0.2 + rnd.Float64()*0.6,
 			loadAnchor: 0.2 + rnd.Float64()*0.6,
 			health:     HealthOK,
 		}
 	}
 
-	edges := make([]graphEdgeState, 0, len(graphCoreEdges)+len(graphOptionalEdges))
+	optionalSpecs := selectOptionalEdges(rnd, graphOptionalEdgeCandidates, graphOptionalEdgeCount)
+
+	edges := make([]graphEdgeState, 0, len(graphCoreEdges)+len(optionalSpecs))
 	for _, spec := range graphCoreEdges {
 		edges = append(edges, graphEdgeState{spec: spec, core: true, active: true, flow: graphFlowInitial})
 	}
-	for _, spec := range graphOptionalEdges {
+	for _, spec := range optionalSpecs {
 		// 半数ほどを最初から張っておく。全部外した状態から始めると、
-		// 起動直後の図が基幹エッジだけの単調な円環に見える。
+		// 起動直後の図が基幹エッジだけの単調な図に見える。
 		edges = append(edges, graphEdgeState{
 			spec:   spec,
 			active: rnd.Float64() < 0.5,
@@ -193,6 +266,70 @@ func newGraphSource(rnd *rand.Rand) *graphSource {
 	// (spec.md §7 受け入れ基準 7.4)。Seq は 0 のまま。
 	s.last = s.build(0)
 	return s
+}
+
+// computeAnchors は spec.md §6.6 手順 1〜5 に従いクラスタベースの錨を算出する。
+//
+// newGraphSource の初期化からのみ呼ぶ(Next の呼び出し経路には置かない。
+// 受け入れ基準 2.4)。クラスタごとにローカルハブ(先頭ノード)をクラスタ中心
+// (オフセット半径 0)に置き、非ハブは graphNodeIDs の配列順の順位で
+// オフセット半径を決め、角度は rnd で一様に選ぶ。同一クラスタ内(ハブを除く)
+// の既確定の錨と近すぎる(graphMinNodeDistance 未満)なら最大
+// graphMaxAnchorRetries 回まで角度を引き直す。
+func computeAnchors(rnd *rand.Rand) (ax, ay []float64) {
+	ax = make([]float64, graphNodeCount)
+	ay = make([]float64, graphNodeCount)
+
+	for _, c := range graphClusters {
+		centerAngleRad := c.centerAngleDeg * math.Pi / 180
+		cx := c.centerRadius * math.Cos(centerAngleRad)
+		cy := c.centerRadius * math.Sin(centerAngleRad)
+
+		hub := c.startIndex
+		ax[hub] = clampUnit(cx)
+		ay[hub] = clampUnit(cy)
+
+		placed := make([][2]float64, 0, c.count-1)
+		for i := 1; i < c.count; i++ {
+			idx := c.startIndex + i
+			rank := i - 1
+			offsetRadius := c.spread * float64(rank+1) / float64(c.count)
+
+			var ox, oy float64
+			for attempt := 0; attempt < graphMaxAnchorRetries; attempt++ {
+				angle := rnd.Float64() * 2 * math.Pi
+				ox = cx + offsetRadius*math.Cos(angle)
+				oy = cy + offsetRadius*math.Sin(angle)
+
+				tooClose := false
+				for _, p := range placed {
+					if math.Hypot(ox-p[0], oy-p[1]) < graphMinNodeDistance {
+						tooClose = true
+						break
+					}
+				}
+				if !tooClose {
+					break
+				}
+			}
+
+			ax[idx] = clampUnit(ox)
+			ay[idx] = clampUnit(oy)
+			placed = append(placed, [2]float64{ax[idx], ay[idx]})
+		}
+	}
+
+	return ax, ay
+}
+
+// selectOptionalEdges は候補プールから重複なく n 本を rnd で選ぶ。
+func selectOptionalEdges(rnd *rand.Rand, candidates []graphEdgeSpec, n int) []graphEdgeSpec {
+	perm := rnd.Perm(len(candidates))
+	selected := make([]graphEdgeSpec, n)
+	for i := 0; i < n; i++ {
+		selected[i] = candidates[perm[i]]
+	}
+	return selected
 }
 
 // EventName はフロントエンドへ送るイベント名を返す。プロセスの生存期間中つねに同じ値。

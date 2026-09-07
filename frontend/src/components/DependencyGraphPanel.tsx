@@ -77,6 +77,7 @@ const FALLBACK_FONT_FAMILY = 'monospace';
 type RenderScratch = {
   previousById: Map<string, main.GraphNode>;
   placements: Map<string, NodePlacement>;
+  healthGroups: Map<string, main.GraphNode[]>;
 };
 
 /**
@@ -214,7 +215,7 @@ export function DependencyGraphPanel(): React.JSX.Element {
     // 色と同じくマウント時に 1 度だけ組み立てる（受け入れ基準 11.6）。
     const font = `${FONT_SIZE}px ${readToken('--font-mono', FALLBACK_FONT_FAMILY)}`;
     // フレームごとに作り直さず、ループの寿命のあいだ使い回す。
-    const scratch: RenderScratch = { previousById: new Map(), placements: new Map() };
+    const scratch: RenderScratch = { previousById: new Map(), placements: new Map(), healthGroups: new Map() };
 
     let handle = 0;
 
@@ -306,7 +307,7 @@ function render(
   // エッジを先に、ノードを後に描く。線がノードの円の上に重ならないようにするため
   // （受け入れ基準 10.4）。
   drawEdges(ctx, state.latest.edges, placements, colors);
-  drawNodes(ctx, state.latest.nodes, placements, colors);
+  drawNodes(ctx, state.latest.nodes, placements, colors, scratch.healthGroups);
   drawLabels(ctx, state.latest.nodes, placements, colors, font);
 }
 
@@ -341,9 +342,21 @@ function drawEdges(
  * `drawNodes` から切り出すのは、`fillStyle` の切り替え回数がノード数によらず
  * 健康状態の異なる値の種類数（最大 3）に収まることを、この関数の出力
  * （グループ数）だけを見て検証できるようにするため（受け入れ基準 6.1）。
+ *
+ * 出力先の Map を呼び出し側から受け取って使い回すのは、毎フレーム
+ * `new Map()` と配列を割り当てないため（CLAUDE.md TypeScript 規約。
+ * ノード数が 36 に増え、6 パネル同時稼働で積み上がるとフレーム予算
+ * (閾値 20ms に対し余裕 2ms 程度)を圧迫しうる）。既存の健康状態ごとの
+ * 配列は `length = 0` で空にして再利用し、新規の健康状態にだけ配列を
+ * 割り当てる。
  */
-function groupNodesByHealth(nodes: readonly main.GraphNode[]): Map<string, main.GraphNode[]> {
-  const groups = new Map<string, main.GraphNode[]>();
+function groupNodesByHealth(
+  nodes: readonly main.GraphNode[],
+  groups: Map<string, main.GraphNode[]>,
+): Map<string, main.GraphNode[]> {
+  for (const group of groups.values()) {
+    group.length = 0;
+  }
   for (const node of nodes) {
     const group = groups.get(node.health);
     if (group === undefined) {
@@ -368,12 +381,13 @@ function drawNodes(
   nodes: readonly main.GraphNode[],
   placements: ReadonlyMap<string, NodePlacement>,
   colors: PanelColors,
+  healthGroups: Map<string, main.GraphNode[]>,
 ): void {
   // 背景色で縁取るのは、重なった円の境目を色の違いだけに頼らず示すため。
   ctx.strokeStyle = colors.background;
   ctx.lineWidth = NODE_STROKE_WIDTH;
 
-  for (const [health, group] of groupNodesByHealth(nodes)) {
+  for (const [health, group] of groupNodesByHealth(nodes, healthGroups)) {
     ctx.fillStyle = healthColor(health, colors);
     for (const node of group) {
       const placement = placements.get(node.id);

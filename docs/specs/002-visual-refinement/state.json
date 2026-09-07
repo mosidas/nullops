@@ -1,10 +1,13 @@
 {
   "workflow": "roadmap",
   "unit": "visual-refinement",
-  "state": "roadmap-approved",
+  "state": "frozen",
   "approvals": {
     "roadmap": true
   },
   "created": "2026-09-06",
-  "updated": "2026-09-06"
+  "updated": "2026-09-07",
+  "frozen": {
+    "roadmap.md": "08441dd339749a080da78d8087919181b582ea47720f97ced2f7c3e821977e7e"
+  }
 }

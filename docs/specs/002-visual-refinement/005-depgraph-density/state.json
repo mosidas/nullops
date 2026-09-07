@@ -1,11 +1,15 @@
 {
   "workflow": "sdd",
   "unit": "depgraph-density",
-  "state": "implementing",
+  "state": "completed",
   "approvals": {
     "spec": true,
     "tasks": true
   },
   "created": "2026-09-07",
-  "updated": "2026-09-07"
+  "updated": "2026-09-07",
+  "frozen": {
+    "spec.md": "cbb606204473c0419b268e0cabd9714a8b841c0f0739f6bf02b2ff3cc348d07f",
+    "tasks.md": "6b1630227a2c898cdeae5b132700a136ebad8e5423cbd38e9e426b7a24071cb7"
+  }
 }

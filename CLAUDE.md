@@ -4,8 +4,6 @@
 
 作業中に見えるダッシュボードを描画するデスクトップアプリ(Wails v2 / Go + Next.js)。[genact](https://github.com/svenstaro/genact) が流す擬似的な作業ログに、コミットグラフ・折れ線グラフ・グラフビュー・タコメータ風インジケータ・3D 散布図を加えて 1 画面に並べる。
 
-- SDD 成果物: `docs/specs/NNN-<roadmap 名>/NNN-<unit>/`(flow-sdd が生成)
-
 ## 言語規約
 
 - 会話・ドキュメント・コード内コメント・PR/Issue 本文・コミットメッセージは日本語で記述しなければならない(MUST)。

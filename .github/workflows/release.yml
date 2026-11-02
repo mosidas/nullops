@@ -57,8 +57,10 @@ jobs:
       # main.go が frontend/dist を go:embed するため、ビルドの後に実行する。
       - name: Test
         run: |
+          go vet ./...
           go test ./...
           cd frontend && npm test
+          npm run lint
 
       - name: Verify app
         shell: bash

@@ -21,7 +21,7 @@
 
 ## 動作環境
 
-macOS(Apple Silicon と Intel)。配布するのは macOS 版だけである。Windows と Linux では「開発」の節の手順でソースからビルドする。
+macOS(Apple Silicon と Intel)。配布するのは macOS 版だけである。Windows と Linux では「開発」の節の `wails build` でソースからビルドする(`scripts/bundle.sh` は macOS 専用)。
 
 ## インストール
 

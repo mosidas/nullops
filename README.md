@@ -38,10 +38,10 @@ macOS(Apple Silicon と Intel)。配布するのは macOS 版だけである。W
 
 ```sh
 wails dev     # 開発モード(ホットリロード)
-wails build   # 配布用ビルド
+wails build   # ビルド(配布物は scripts/bundle.sh で作る)
 ```
 
-必要なもの: Go 1.25 以上、Node.js 24 以上、[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2。
+必要なもの: Go 1.26 以上、Node.js 24 以上、[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2。
 
 ### フレーム時間の計測
 

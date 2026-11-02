@@ -21,7 +21,18 @@
 
 ## 動作環境
 
-macOS / Windows / Linux。
+macOS(Apple Silicon と Intel)。配布するのは macOS 版だけである。Windows と Linux では「開発」の節の手順でソースからビルドする。
+
+## インストール
+
+[Releases](https://github.com/mosidas/nullops/releases) から `nullops-<バージョン>.zip` をダウンロードして展開し、`nullops.app` を `/Applications` へ移して開く。Apple Silicon と Intel の両方で動くユニバーサルビルドである。
+
+配布物はアドホック署名だけで公証していないため、初回の起動は Gatekeeper に止められる。次のどちらかで起動を許可する。
+
+- ターミナルで `xattr -dr com.apple.quarantine /Applications/nullops.app` を実行し、隔離属性を外す。
+- 一度開いてブロックされたあと、システム設定 > プライバシーとセキュリティ の下部にある「このまま開く」を押す(macOS 14 では Finder で右クリックして「開く」でもよい)。
+
+ソースからビルドするときは、`scripts/bundle.sh` を実行し、できた `build/bin/nullops.app` を `/Applications` へコピーして開く。必要なものは「開発」の節にある。
 
 ## 開発
 

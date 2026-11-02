@@ -21,16 +21,27 @@
 
 ## 動作環境
 
-macOS / Windows / Linux。
+macOS(Apple Silicon と Intel)。配布するのは macOS 版だけである。Windows と Linux では「開発」の節の `wails build` でソースからビルドする(`scripts/bundle.sh` は macOS 専用)。
+
+## インストール
+
+[Releases](https://github.com/mosidas/nullops/releases) から `nullops-<バージョン>.zip` をダウンロードして展開し、`nullops.app` を `/Applications` へ移して開く。Apple Silicon と Intel の両方で動くユニバーサルビルドである。
+
+配布物はアドホック署名だけで公証していないため、初回の起動は Gatekeeper に止められる。次のどちらかで起動を許可する。
+
+- ターミナルで `xattr -dr com.apple.quarantine /Applications/nullops.app` を実行し、隔離属性を外す。
+- 一度開いてブロックされたあと、システム設定 > プライバシーとセキュリティ の下部にある「このまま開く」を押す(macOS 14 では Finder で右クリックして「開く」でもよい)。
+
+ソースからビルドするときは、`scripts/bundle.sh` を実行し、できた `build/bin/nullops.app` を `/Applications` へコピーして開く。必要なものは「開発」の節にある。
 
 ## 開発
 
 ```sh
 wails dev     # 開発モード(ホットリロード)
-wails build   # 配布用ビルド
+wails build   # ビルド(配布物は scripts/bundle.sh で作る)
 ```
 
-必要なもの: Go 1.25 以上、Node.js 24 以上、[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2。
+必要なもの: Go 1.26 以上、Node.js 24 以上、[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2。
 
 ### フレーム時間の計測
 

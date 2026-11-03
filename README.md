@@ -53,3 +53,7 @@ wails build   # ビルド(配布物は scripts/bundle.sh で作る)
 4. コンソールで `window.nullops.enableFrameStats()` を呼ぶ。60 フレームごとに 5 パネルぶんの値が出力される。
 
 描画の負荷を増やす変更をする際の設計指針は `docs/adr/0002-canvas2d-drawcall-budget-for-p95.md` を参照。
+
+## ライセンス
+
+MIT License。詳細は [LICENSE](LICENSE) を参照する。

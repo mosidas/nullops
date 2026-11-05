@@ -5,7 +5,7 @@
 ## 前提
 
 - macOS で行う。Web インスペクタを開くキーが macOS のものである。
-- Go・Node.js・Wails CLI がインストール済みである([nullops の README](../README.md#ソースからビルドする) の「ソースからビルドする」の 1.)。
+- Go・Node.js・Wails CLI がインストール済みである(nullops の README の [ソースからビルドする](../README.md#ソースからビルドする) の 1.)。
 - 計測は配布ビルドで行う。`wails build` だけで作ったアプリはコンソールを開けないため、`-devtools` を付けてビルドする。
 
 ## 計測する

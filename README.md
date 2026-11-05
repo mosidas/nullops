@@ -1,59 +1,45 @@
 # nullops
 
-作業中に見えるダッシュボードを表示するデスクトップアプリ。実際の処理は何も実行しない。
-
-[genact](https://github.com/svenstaro/genact) が流す擬似的な作業ログに可視化パネルを加え、1 画面に並べる。
-
-## 画面
-
-中央に 3D 散布図を据え、上に折れ線グラフの帯、左にログストリームの縦長、右上にタコメータ、右にグラフビューとコミットグラフを積む中央主役型で、6 枠は均等でなく、見出しを持たない。
-
-| パネル | 位置 | 内容 |
-| :- | :- | :- |
-| 折れ線グラフ | 上の帯 | スループット・レイテンシ等の時系列を描く |
-| タコメータ | 右上 | 針が使用率を指す円形インジケータ |
-| ログストリーム | 左の縦長 | ビルド・デプロイ・スキャン等の擬似ログを流す |
-| 3D 散布図 | 中央(最も大きい枠) | 3 次元空間の点群を回転させる |
-| グラフビュー | 右の上段 | ノードとエッジで依存関係を描く |
-| コミットグラフ | 右の下段 | 分岐とマージを含むコミット履歴を描く |
-
-表の並びは配置の順(上から下、同じ高さでは左から右)と一致する。
+実際の処理は何も実行せずに、擬似的な作業ログと 5 つの可視化パネル(折れ線グラフ・タコメータ・3D 散布図・グラフビュー・コミットグラフ)を 1 画面に並べて表示するデスクトップアプリ。
 
 ## 動作環境
 
-macOS(Apple Silicon と Intel)。配布するのは macOS 版だけである。Windows と Linux では「開発」の節の `wails build` でソースからビルドする(`scripts/bundle.sh` は macOS 専用)。
+- macOS(Apple Silicon と Intel)。Releases の配布物は macOS 版だけである
+- Windows と Linux。ソースからビルドする
 
 ## インストール
 
-[Releases](https://github.com/mosidas/nullops/releases) から `nullops-<バージョン>.zip` をダウンロードして展開し、`nullops.app` を `/Applications` へ移して開く。Apple Silicon と Intel の両方で動くユニバーサルビルドである。
+### Releases から
 
-配布物はアドホック署名だけで公証していないため、初回の起動は Gatekeeper に止められる。次のどちらかで起動を許可する。
+1. [Releases](https://github.com/mosidas/nullops/releases) から `nullops-<バージョン>.zip` をダウンロードして展開する。
+2. `nullops.app` を `/Applications` へ移す。
+3. 配布物はアドホック署名だけで公証していないため、初回の起動は Gatekeeper に止められる。ターミナルで `xattr -dr com.apple.quarantine /Applications/nullops.app` を実行し、隔離属性を外す。
+4. `nullops.app` を開く。
 
-- ターミナルで `xattr -dr com.apple.quarantine /Applications/nullops.app` を実行し、隔離属性を外す。
-- 一度開いてブロックされたあと、システム設定 > プライバシーとセキュリティ の下部にある「このまま開く」を押す(macOS 14 では Finder で右クリックして「開く」でもよい)。
+### ソースからビルドする
 
-ソースからビルドするときは、`scripts/bundle.sh` を実行し、できた `build/bin/nullops.app` を `/Applications` へコピーして開く。必要なものは「開発」の節にある。
+1. Go 1.26 以上・Node.js 24 以上・[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2 をインストールする。
+2. macOS では `scripts/bundle.sh` を実行する。`build/bin/nullops.app` ができる。
+3. macOS では `nullops.app` を `/Applications` へコピーして開く。
+4. Windows と Linux では、2. と 3. の代わりに `wails build` を実行し、`build/bin` にできた実行ファイルを開く。
+
+## 使い方
+
+nullops を開いたままにする。パネルは終了するまで動き続ける。
 
 ## 開発
 
+道具は「ソースからビルドする」の 1. と同じである。`go test` は `frontend/dist` を埋め込むため、先に `wails build` を実行する。
+
 ```sh
-wails dev     # 開発モード(ホットリロード)
-wails build   # ビルド(配布物は scripts/bundle.sh で作る)
+wails dev                  # ホットリロードで動かす
+wails build
+go test ./...
+cd frontend && npm test
 ```
 
-必要なもの: Go 1.26 以上、Node.js 24 以上、[Wails CLI](https://wails.io/docs/gettingstarted/installation) v2。
-
-### フレーム時間の計測
-
-5 パネル(`commit`・`depgraph`・`gauge`・`scatter`・`timeseries`)のフレーム時間(n / mean / p95 / max)は配布ビルドで計測する。素の `wails build` はコンソールを開けないため、次の手順を踏む。
-
-1. `wails build -devtools` でビルドする。
-2. アプリを起動する。
-3. ⌘⇧F12 で Web インスペクタを開く。
-4. コンソールで `window.nullops.enableFrameStats()` を呼ぶ。60 フレームごとに 5 パネルぶんの値が出力される。
-
-描画の負荷を増やす変更をする際の設計指針は `docs/adr/0002-canvas2d-drawcall-budget-for-p95.md` を参照。
+描画の負荷を変えたときは、[フレーム時間の計測](docs/frame-stats.md) の手順で p95 を測る。
 
 ## ライセンス
 
-MIT License。詳細は [LICENSE](LICENSE) を参照する。
+[MIT License](LICENSE)
